@@ -123,6 +123,11 @@ to represent this.
 Please document your key design considerations and assumptions made when the test is performed as a
 takeaway exercise.
 
+### Swagger
+This template uses ***springdoc-openapi*** to document the API and create a Swagger spec.
+The Swagger UI is available at http://localhost:9090/swagger-ui.html
+
+
 ## Implementation considerations
 
 We expect the following with each submission:
@@ -137,10 +142,9 @@ We expect the following with each submission:
 ## Template structure
 
 ```
-src/
-    PaymentGatewayApplication - a skeleton SpringBoot Application
+src/ - A skeleton SpringBoot Application
 
-test/ - some simple JUnit tests
+test/ - Some simple JUnit tests
 
 imposters/ - contains the bank simulator configuration. Don't change this
 
@@ -218,5 +222,3 @@ have full control of how the server responds, and it ensures your remote test do
 overly complex
 trying to handle lots of different scenarios. Rather the mock is programmed based of what a specific
 test requires.
-
-## payment-gateway-challenge-java 
