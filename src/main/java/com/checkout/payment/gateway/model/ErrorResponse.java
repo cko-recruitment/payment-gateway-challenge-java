@@ -1,9 +1,9 @@
 package com.checkout.payment.gateway.model;
 
-public class ResponseEvent {
-  private String message;
+public class ErrorResponse {
+  private final String message;
 
-  public ResponseEvent(String message) {
+  public ErrorResponse(String message) {
     this.message = message;
   }
 
@@ -11,13 +11,9 @@ public class ResponseEvent {
     return message;
   }
 
-  public void setMessage(String message) {
-    this.message = message;
-  }
-
   @Override
   public String toString() {
-    return "ResponseEvent{" +
+    return "ErrorResponse{" +
         "message='" + message + '\'' +
         '}';
   }
