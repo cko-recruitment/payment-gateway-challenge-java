@@ -33,13 +33,13 @@ public class CommonExceptionHandler {
         .toList();
 
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.name(), errorMessages));
+        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.getName(), errorMessages));
   }
 
   @ExceptionHandler(PaymentRejectedException.class)
   public ResponseEntity<RejectedPaymentResponse> handlePaymentRejected(PaymentRejectedException ex) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.name(), ex.getMessages()));
+        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.getName(), ex.getMessages()));
   }
 
   @ExceptionHandler(PaymentNotFoundException.class)
