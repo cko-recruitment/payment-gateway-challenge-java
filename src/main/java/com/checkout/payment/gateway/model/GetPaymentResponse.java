@@ -6,11 +6,11 @@ import java.util.UUID;
 public class GetPaymentResponse {
   private UUID id;
   private PaymentStatus status;
-  private int cardNumberLastFour;
-  private int expiryMonth;
-  private int expiryYear;
+  private Integer cardNumberLastFour;
+  private Integer expiryMonth;
+  private Integer expiryYear;
   private String currency;
-  private int amount;
+  private Integer amount;
 
   public UUID getId() {
     return id;
@@ -28,27 +28,27 @@ public class GetPaymentResponse {
     this.status = status;
   }
 
-  public int getCardNumberLastFour() {
+  public Integer getCardNumberLastFour() {
     return cardNumberLastFour;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
+  public void setCardNumberLastFour(Integer cardNumberLastFour) {
     this.cardNumberLastFour = cardNumberLastFour;
   }
 
-  public int getExpiryMonth() {
+  public Integer getExpiryMonth() {
     return expiryMonth;
   }
 
-  public void setExpiryMonth(int expiryMonth) {
+  public void setExpiryMonth(Integer expiryMonth) {
     this.expiryMonth = expiryMonth;
   }
 
-  public int getExpiryYear() {
+  public Integer getExpiryYear() {
     return expiryYear;
   }
 
-  public void setExpiryYear(int expiryYear) {
+  public void setExpiryYear(Integer expiryYear) {
     this.expiryYear = expiryYear;
   }
 
@@ -60,11 +60,11 @@ public class GetPaymentResponse {
     this.currency = currency;
   }
 
-  public int getAmount() {
+  public Integer getAmount() {
     return amount;
   }
 
-  public void setAmount(int amount) {
+  public void setAmount(Integer amount) {
     this.amount = amount;
   }
 
