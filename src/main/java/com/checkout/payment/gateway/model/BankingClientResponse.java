@@ -18,6 +18,7 @@ public class BankingClientResponse {
     this.authorizationCode = authorizationCode;
     this.authorized = authorized;
   }
+
   public Boolean getAuthorized() {
     return authorized;
   }
