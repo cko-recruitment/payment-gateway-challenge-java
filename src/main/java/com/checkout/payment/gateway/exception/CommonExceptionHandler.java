@@ -9,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import java.util.stream.Collectors;
+import java.util.List;
 
 @ControllerAdvice
 public class CommonExceptionHandler {
@@ -25,20 +25,20 @@ public class CommonExceptionHandler {
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<RejectedPaymentResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
-    String errorMessage = ex.getBindingResult()
+    List<String> errorMessages = ex.getBindingResult()
         .getFieldErrors()
         .stream()
         .map(error -> error.getField() + ": " + error.getDefaultMessage())
-        .collect(Collectors.joining(", "));
+        .toList();
 
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse("Rejected", errorMessage));
+        .body(new RejectedPaymentResponse("Rejected", errorMessages));
   }
 
   @ExceptionHandler(PaymentRejectedException.class)
   public ResponseEntity<RejectedPaymentResponse> handlePaymentRejected(PaymentRejectedException ex) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse("Rejected", ex.getMessage()));
+        .body(new RejectedPaymentResponse("Rejected", ex.getMessages()));
   }
 
   @ExceptionHandler(PaymentNotFoundException.class)

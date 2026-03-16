@@ -9,6 +9,8 @@ public class BankingClientResponse {
   @JsonProperty("authorization_code")
   private String authorizationCode;
 
+  public BankingClientResponse () {}
+
   public BankingClientResponse(
       Boolean authorized,
       String authorizationCode

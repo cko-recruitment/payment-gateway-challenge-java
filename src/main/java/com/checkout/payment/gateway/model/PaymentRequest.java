@@ -12,27 +12,18 @@ import java.io.Serializable;
 public class PaymentRequest implements Serializable {
 
   @JsonProperty("card_number")
-  @NotBlank(message = "card_number is required")
-  @Pattern(regexp = "\\d{14,19}", message = "cardNumber must be between 14 and 19 digits")
   private String cardNumber;
 
   @JsonProperty("expiry_month")
-  @NotNull(message = "expiry_month is required")
-  @Min(value = 1, message = "expiryMonth must be between 1 and 12")
-  @Max(value = 12, message = "expiryMonth must be between 1 and 12")
   private Integer expiryMonth;
+
   @JsonProperty("expiry_year")
-  @NotNull(message = "expiry_year is required")
-  @Min(value = 2000, message = "expiryYear is invalid")
   private Integer expiryYear;
-  @NotBlank(message = "currency is required")
-  @Pattern(regexp = "^(USD|EUR|GBP)$", message = "currency must be one of USD, EUR, GBP")
+
   private String currency;
-  @NotNull(message = "amount is required")
-  @Positive(message = "amount must be greater than zero")
+
   private Integer amount;
-  @NotBlank(message = "cvv is required")
-  @Pattern(regexp = "\\d{3,4}", message = "cvv must be 3 or 4 digits")
+
   private String cvv;
 
   public String getCardNumber() {

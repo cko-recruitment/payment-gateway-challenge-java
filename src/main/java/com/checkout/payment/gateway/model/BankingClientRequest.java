@@ -12,6 +12,7 @@ public class BankingClientRequest {
   private String currency;
   private Integer amount;
 
+  public BankingClientRequest() {}
   public BankingClientRequest(String cardNumber, String expiryDate, String cvv, String currency,
       Integer amount) {
     this.cardNumber = cardNumber;
