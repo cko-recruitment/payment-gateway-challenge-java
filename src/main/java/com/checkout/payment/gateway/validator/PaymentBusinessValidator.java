@@ -23,7 +23,7 @@ public class PaymentBusinessValidator {
       throw new PaymentRejectedException(errors);
     }
 
-    boolean cardNumberValid = validateCardNumber(request.getCardNumber(), errors);
+    validateCardNumber(request.getCardNumber(), errors);
     boolean expiryMonthValid = validateExpiryMonth(request.getExpiryMonth(), errors);
     boolean expiryYearValid = validateExpiryYear(request.getExpiryYear(), errors);
     validateExpiryDate(request.getExpiryMonth(), request.getExpiryYear(), expiryMonthValid, expiryYearValid, errors);
@@ -36,25 +36,19 @@ public class PaymentBusinessValidator {
     }
   }
 
-  private boolean validateCardNumber(String cardNumber, List<String> errors) {
-    boolean valid = true;
+  private void validateCardNumber(String cardNumber, List<String> errors) {
 
     if (!StringUtils.hasText(cardNumber)) {
       errors.add("Card number is required");
-      return false;
     }
 
     if (cardNumber.length() < 14 || cardNumber.length() > 19) {
       errors.add("Card number must be between 14 and 19 digits");
-      valid = false;
     }
 
     if (!cardNumber.matches("^\\d+$")) {
       errors.add("Card number must contain only numeric characters");
-      valid = false;
     }
-
-    return valid;
   }
 
   private boolean validateExpiryMonth(Integer expiryMonth, List<String> errors) {
