@@ -3,6 +3,7 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.Client.AcquiringBankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.BankingClientResponse;
 import com.checkout.payment.gateway.model.Payment;
 import com.checkout.payment.gateway.model.PaymentRequest;
@@ -20,8 +21,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PaymentGatewayService {
-
-  private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
 
   private final PaymentsRepository paymentsRepository;
   private final AcquiringBankClient client;
@@ -41,7 +40,7 @@ public class PaymentGatewayService {
 
   public PaymentResponse getPaymentById(UUID paymentId) {
     Payment payment = paymentsRepository.get(paymentId)
-        .orElseThrow(() -> new EventProcessingException("Invalid ID"));
+        .orElseThrow(() -> new PaymentNotFoundException("Invalid ID"));
     return paymentResponseMapper.map(payment);
   }
 
@@ -68,19 +67,15 @@ public class PaymentGatewayService {
         : null;
 
     return new Payment(
-        UUID.randomUUID(),
+        UUID.randomUUID(), //random UUID
         status,
         CardNumberMaskingUtil.mask(request.getCardNumber()),
         request.getCurrency(),
+        request.getAmount(),
         request.getExpiryMonth(),
         request.getExpiryYear(),
-        request.getAmount(),
         authorizationCode,
         Instant.now()
     );
   }
-
-//  private String extractLastFour(String cardNumber) {
-//    return cardNumber.substring(cardNumber.length() - 4);
-//  }
 }

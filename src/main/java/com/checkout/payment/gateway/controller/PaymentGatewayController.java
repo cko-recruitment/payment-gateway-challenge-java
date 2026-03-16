@@ -24,7 +24,7 @@ public class PaymentGatewayController {
     this.paymentGatewayService = paymentGatewayService;
   }
 
-  @PostMapping("/payments")
+  @PostMapping("/payment")
   public ResponseEntity<PaymentResponse> processPayment(
       @Valid @RequestBody PaymentRequest request) {
 
