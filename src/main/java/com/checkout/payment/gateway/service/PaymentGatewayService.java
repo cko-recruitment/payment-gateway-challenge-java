@@ -2,7 +2,6 @@ package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.Client.AcquiringBankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.exception.EventProcessingException;
 import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.BankingClientResponse;
 import com.checkout.payment.gateway.model.Payment;
@@ -15,8 +14,6 @@ import com.checkout.payment.gateway.utils.PaymentResponseMapper;
 import com.checkout.payment.gateway.validator.PaymentBusinessValidator;
 import java.time.Instant;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -46,14 +43,9 @@ public class PaymentGatewayService {
 
   public PaymentResponse processPayment(PaymentRequest request) {
     validator.validate(request);
-
-    BankingClientResponse bankResponse =
-        client.authorize(bankingClientRequestMapper.map(request)); //Acquiring bank client call
-
+    BankingClientResponse bankResponse = client.authorize(bankingClientRequestMapper.map(request)); //Acquiring bank client call
     Payment payment = buildPayment(request, bankResponse);
-
     Payment savedPayment = paymentsRepository.add(payment);
-
     return paymentResponseMapper.map(savedPayment);
   }
 

@@ -1,5 +1,6 @@
 package com.checkout.payment.gateway.exception;
 
+import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.ErrorResponse;
 import com.checkout.payment.gateway.model.RejectedPaymentResponse;
 import org.slf4j.Logger;
@@ -32,13 +33,13 @@ public class CommonExceptionHandler {
         .toList();
 
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse("Rejected", errorMessages));
+        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.name(), errorMessages));
   }
 
   @ExceptionHandler(PaymentRejectedException.class)
   public ResponseEntity<RejectedPaymentResponse> handlePaymentRejected(PaymentRejectedException ex) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(new RejectedPaymentResponse("Rejected", ex.getMessages()));
+        .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.name(), ex.getMessages()));
   }
 
   @ExceptionHandler(PaymentNotFoundException.class)
