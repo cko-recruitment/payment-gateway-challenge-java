@@ -3,14 +3,27 @@ package com.checkout.payment.gateway.model;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import java.util.UUID;
 
-public class GetPaymentResponse {
+public class PaymentResponse {
   private UUID id;
   private PaymentStatus status;
-  private int cardNumberLastFour;
-  private int expiryMonth;
-  private int expiryYear;
+  private String maskedCardNumber;
+  private Integer expiryMonth;
+  private Integer expiryYear;
   private String currency;
-  private int amount;
+  private Integer amount;
+
+  public PaymentResponse(){}
+
+  public PaymentResponse(UUID id, PaymentStatus status, String maskedCardNumber,
+      Integer expiryMonth, Integer expiryYear, String currency, Integer amount) {
+    this.id = id;
+    this.status = status;
+    this.maskedCardNumber = maskedCardNumber;
+    this.expiryMonth = expiryMonth;
+    this.expiryYear = expiryYear;
+    this.currency = currency;
+    this.amount = amount;
+  }
 
   public UUID getId() {
     return id;
@@ -28,27 +41,27 @@ public class GetPaymentResponse {
     this.status = status;
   }
 
-  public int getCardNumberLastFour() {
-    return cardNumberLastFour;
+  public String getCardNumberLastFour() {
+    return maskedCardNumber;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
-    this.cardNumberLastFour = cardNumberLastFour;
+  public void setCardNumberLastFour(String cardNumberLastFour) {
+    this.maskedCardNumber = cardNumberLastFour;
   }
 
-  public int getExpiryMonth() {
+  public Integer getExpiryMonth() {
     return expiryMonth;
   }
 
-  public void setExpiryMonth(int expiryMonth) {
+  public void setExpiryMonth(Integer expiryMonth) {
     this.expiryMonth = expiryMonth;
   }
 
-  public int getExpiryYear() {
+  public Integer getExpiryYear() {
     return expiryYear;
   }
 
-  public void setExpiryYear(int expiryYear) {
+  public void setExpiryYear(Integer expiryYear) {
     this.expiryYear = expiryYear;
   }
 
@@ -60,20 +73,21 @@ public class GetPaymentResponse {
     this.currency = currency;
   }
 
-  public int getAmount() {
+  public Integer getAmount() {
     return amount;
   }
 
-  public void setAmount(int amount) {
+  public void setAmount(Integer amount) {
     this.amount = amount;
   }
+
 
   @Override
   public String toString() {
     return "GetPaymentResponse{" +
         "id=" + id +
         ", status=" + status +
-        ", cardNumberLastFour=" + cardNumberLastFour +
+        ", cardNumberLastFour=" + maskedCardNumber +
         ", expiryMonth=" + expiryMonth +
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +

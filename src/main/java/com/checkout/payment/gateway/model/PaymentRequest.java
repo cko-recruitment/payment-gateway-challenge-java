@@ -3,39 +3,43 @@ package com.checkout.payment.gateway.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.Serializable;
 
-public class PostPaymentRequest implements Serializable {
+public class PaymentRequest implements Serializable {
 
-  @JsonProperty("card_number_last_four")
-  private int cardNumberLastFour;
+  @JsonProperty("card_number")
+  private String cardNumber;
+
   @JsonProperty("expiry_month")
-  private int expiryMonth;
+  private Integer expiryMonth;
+
   @JsonProperty("expiry_year")
-  private int expiryYear;
+  private Integer expiryYear;
+
   private String currency;
-  private int amount;
-  private int cvv;
 
-  public int getCardNumberLastFour() {
-    return cardNumberLastFour;
+  private Integer amount;
+
+  private String cvv;
+
+  public String getCardNumber() {
+    return cardNumber;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
-    this.cardNumberLastFour = cardNumberLastFour;
+  public void setCardNumber(String cardNumber) {
+    this.cardNumber = cardNumber;
   }
-
-  public int getExpiryMonth() {
+  public Integer getExpiryMonth() {
     return expiryMonth;
   }
 
-  public void setExpiryMonth(int expiryMonth) {
+  public void setExpiryMonth(Integer expiryMonth) {
     this.expiryMonth = expiryMonth;
   }
 
-  public int getExpiryYear() {
+  public Integer getExpiryYear() {
     return expiryYear;
   }
 
-  public void setExpiryYear(int expiryYear) {
+  public void setExpiryYear(Integer expiryYear) {
     this.expiryYear = expiryYear;
   }
 
@@ -47,19 +51,19 @@ public class PostPaymentRequest implements Serializable {
     this.currency = currency;
   }
 
-  public int getAmount() {
+  public Integer getAmount() {
     return amount;
   }
 
-  public void setAmount(int amount) {
+  public void setAmount(Integer amount) {
     this.amount = amount;
   }
 
-  public int getCvv() {
+  public String getCvv() {
     return cvv;
   }
 
-  public void setCvv(int cvv) {
+  public void setCvv(String cvv) {
     this.cvv = cvv;
   }
 
@@ -71,7 +75,7 @@ public class PostPaymentRequest implements Serializable {
   @Override
   public String toString() {
     return "PostPaymentRequest{" +
-        "cardNumberLastFour=" + cardNumberLastFour +
+        "cardNumber=" + cardNumber +
         ", expiryMonth=" + expiryMonth +
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
