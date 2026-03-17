@@ -19,13 +19,14 @@ public class CommonExceptionHandler {
 
   @ExceptionHandler(EventProcessingException.class)
   public ResponseEntity<ErrorResponse> handleException(EventProcessingException ex) {
-    LOG.error("Exception happened", ex);
+    LOG.error("EventProcessingException happened", ex);
     return new ResponseEntity<>(new ErrorResponse("Page not found"),
         HttpStatus.NOT_FOUND);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<RejectedPaymentResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+    LOG.error("MethodArgumentNotValidException happened", ex);
     List<String> errorMessages = ex.getBindingResult()
         .getFieldErrors()
         .stream()
@@ -38,22 +39,26 @@ public class CommonExceptionHandler {
 
   @ExceptionHandler(PaymentRejectedException.class)
   public ResponseEntity<RejectedPaymentResponse> handlePaymentRejected(PaymentRejectedException ex) {
+    LOG.error("PaymentRejectedException happened", ex);
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(new RejectedPaymentResponse(PaymentStatus.REJECTED.getName(), ex.getMessages()));
   }
 
   @ExceptionHandler(PaymentNotFoundException.class)
   public ResponseEntity<String> handlePaymentNotFound(PaymentNotFoundException ex) {
+    LOG.error("PaymentNotFoundException happened", ex);
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
   }
 
   @ExceptionHandler(BankUnavailableException.class)
   public ResponseEntity<String> handleBankUnavailable(BankUnavailableException ex) {
+    LOG.error("BankUnavailableException happened", ex);
     return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ex.getMessage());
   }
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<String> handleUnexpected(Exception ex) {
+    LOG.error("Exception happened (Generic Interceptor)", ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred");
   }
 }
