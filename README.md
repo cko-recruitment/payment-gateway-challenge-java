@@ -60,6 +60,7 @@ Controller -> Service -> Validator -> Client -> Repository (In-memory)
 ## ProcessPayment
 
 POST api/payment
+header - UUID
 
 valid Request:
 

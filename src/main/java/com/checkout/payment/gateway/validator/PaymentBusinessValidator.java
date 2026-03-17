@@ -9,7 +9,34 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+/**
+ * Component responsible for performing business-level validation on {@link PaymentRequest}.
 
+ * This validator ensures that all incoming payment requests conform to expected
+ * business rules before being processed. It performs comprehensive validation across
+ * multiple fields and aggregates all validation errors before rejecting the request.
+
+ * Validation Strategy:
+    - Validate all fields and collect errors instead of failing fast
+    - Throw a {@link PaymentRejectedException} containing all validation errors
+    - Ensure both format and business rules are enforced
+
+ * Validated Fields:
+    - Card number (presence, length, numeric format)
+    - Expiry month and year (valid ranges and not in the past)
+    - Currency (format and supported values)
+    - Amount (non-null and greater than zero)
+    - CVV (length and numeric format)
+
+ * Error Handling:
+ * If validation fails, a {@link PaymentRejectedException} is thrown containing
+ * a list of all validation errors, enabling clients to correct multiple issues
+ * in a single response.
+
+ * Supported Currencies:
+ * The validator currently supports a fixed set of currencies defined in
+ * {@link #SUPPORTED_CURRENCIES}.
+ */
 @Component
 public class PaymentBusinessValidator {
 

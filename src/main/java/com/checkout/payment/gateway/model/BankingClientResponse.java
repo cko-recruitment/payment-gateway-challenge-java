@@ -2,6 +2,9 @@ package com.checkout.payment.gateway.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * Acquiring Bank Client Response entity
+ */
 public class BankingClientResponse {
 
   @JsonProperty("authorized")

@@ -3,6 +3,9 @@ package com.checkout.payment.gateway.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.Serializable;
 
+/**
+ * Payment Request entity submitted to the Payment Gateway
+ */
 public class PaymentRequest implements Serializable {
 
   @JsonProperty("card_number")

@@ -7,6 +7,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.springframework.stereotype.Repository;
 
+/**
+ * In-memory implementation of {@link PaymentsRepository} for storing payment records.
+ * This repository uses a {@link ConcurrentHashMap} to store {@link Payment} objects,
+ * keyed by their unique identifier ({@link UUID}). It is designed to be thread-safe
+ * and suitable for concurrent access in a multi-threaded environment.
+
+ * Note: This implementation is intended for demonstration or testing purposes only.
+ * Data is stored in-memory and will be lost when the application restarts. It is not suitable
+ * for production use where persistent storage is required.
+
+ * Typical usage includes:
+     - Storing newly created payments
+     - Retrieving payments by their unique identifier
+ */
 @Repository
 public class InMemoryPaymentsRepository implements PaymentsRepository {
 

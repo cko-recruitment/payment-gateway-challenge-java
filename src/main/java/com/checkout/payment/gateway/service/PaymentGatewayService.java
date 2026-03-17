@@ -19,6 +19,30 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
+/**
+ * Service responsible for orchestrating payment processing operations.
+ * This service acts as the core business layer of the payment gateway and handles:
+    - Processing new payment requests
+    - Ensuring idempotency using a unique payment identifier
+    - Interacting with the acquiring bank for authorization
+    - Persisting and retrieving payment records
+
+ * Idempotency
+ * Each payment request is associated with a unique {@link UUID} (idempotency key).
+ * If a request with the same key is received:
+     - If the request payload matches (based on fingerprint), the existing payment is returned
+     - If the payload differs, the request is rejected to prevent inconsistent state
+
+ * Processing Flow:
+     - Generate a fingerprint of the incoming request
+     - Check if a payment with the given idempotency key already exists
+     - If exists, validate fingerprint and return existing response
+     - If not, validate request and send authorization request to acquiring bank
+     - Persist the payment with the result and return response
+
+ * This implementation ensures consistency, avoids duplicate transactions,
+ * and encapsulates all business logic related to payment lifecycle management.
+ */
 @Service
 public class PaymentGatewayService {
 

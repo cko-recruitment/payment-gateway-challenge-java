@@ -2,6 +2,9 @@ package com.checkout.payment.gateway.exception;
 
 import java.util.List;
 
+/**
+ * Exception thrown when the PaymentRequest contains Invalid fields in the request
+ */
 public class PaymentRejectedException extends RuntimeException {
 
   private final List<String> messages;

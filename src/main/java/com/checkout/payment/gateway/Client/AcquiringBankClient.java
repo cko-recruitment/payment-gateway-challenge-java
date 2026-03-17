@@ -11,7 +11,12 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClient.Builder;
 import org.springframework.web.client.RestClientException;
+
+/**
+ * Client responsible for interacting with the acquiring bank.
+ */
 
 @Component
 public class AcquiringBankClient {
@@ -20,13 +25,24 @@ public class AcquiringBankClient {
 
   private final RestClient restClient;
 
-  public AcquiringBankClient(RestClient.Builder builder,
+  public AcquiringBankClient(Builder builder,
       @Value("${bank.base-url}") String bankBaseUrl) {
     this.restClient = builder
         .baseUrl(bankBaseUrl)
         .build();
   }
 
+  /**
+   * Sends an authorization request to the acquiring bank with retry logic.
+
+   * The method attempts to call the acquiring bank up to {@value #MAX_ATTEMPTS} times
+   * for retryable failures such as network issues or server errors.
+
+   * @param request the payment authorization request
+   * @return the bank authorization response
+   * @throws BankIntegrationException if the bank rejects the request (4xx errors)
+   * @throws BankUnavailableException if the bank is unavailable after retries
+   */
   public BankingClientResponse authorize(BankingClientRequest request) {
     int attempt = 1;
 

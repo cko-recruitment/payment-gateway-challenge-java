@@ -3,6 +3,10 @@ package com.checkout.payment.gateway.model;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import java.util.UUID;
 
+/**
+ * Payment Response entity received from the payment gateway
+ * for AUTHORIZED / DECLINED payments
+ */
 public class PaymentResponse {
   private UUID id;
   private PaymentStatus status;

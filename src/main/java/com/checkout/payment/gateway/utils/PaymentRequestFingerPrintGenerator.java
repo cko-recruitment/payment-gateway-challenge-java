@@ -6,6 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * Utility component responsible for generating a deterministic fingerprint
+ * for a given {@link PaymentRequest}.
+ */
 @Component
 public class PaymentRequestFingerPrintGenerator {
 

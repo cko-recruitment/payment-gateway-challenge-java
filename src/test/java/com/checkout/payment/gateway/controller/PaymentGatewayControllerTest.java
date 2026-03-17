@@ -19,6 +19,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -60,7 +62,7 @@ class PaymentGatewayControllerTest {
 
     PaymentRequest request = validRequest("4242424242424241");
 
-    mockMvc.perform(post("/api/payment")
+    mockMvc.perform(post("/api/payments")
             .header("Idempotency-Key", IDEMPOTENCY_KEY)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
@@ -80,7 +82,7 @@ class PaymentGatewayControllerTest {
 
     PaymentRequest request = validRequest("4242424242424242");
 
-    mockMvc.perform(post("/api/payment")
+    mockMvc.perform(post("/api/payments")
             .header("Idempotency-Key", IDEMPOTENCY_KEY_2)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
@@ -103,7 +105,7 @@ class PaymentGatewayControllerTest {
         }
         """;
 
-    mockMvc.perform(post("/api/payment")
+    mockMvc.perform(post("/api/payments")
             .header("Idempotency-Key", IDEMPOTENCY_KEY_3)
             .contentType(MediaType.APPLICATION_JSON)
             .content(invalidJson))
@@ -131,7 +133,7 @@ class PaymentGatewayControllerTest {
 
     paymentRepository.add(payment);
 
-    mockMvc.perform(get("/api/payment/{id}", paymentId))
+    mockMvc.perform(get("/api/payments/{id}", paymentId))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(paymentId.toString()))
         .andExpect(jsonPath("$.status").value("Authorized"))
@@ -140,8 +142,67 @@ class PaymentGatewayControllerTest {
 
   @Test
   void shouldReturn404WhenPaymentNotFound() throws Exception {
-    mockMvc.perform(get("/api/payment/{id}", UUID.randomUUID()))
+    mockMvc.perform(get("/api/payments/{id}", UUID.randomUUID()))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void shouldRejectDuplicateRequestWhenSameIdempotencyKeyIsUsedWithDifferentPayload() throws Exception {
+    BankingClientResponse bankResponse = new BankingClientResponse();
+    bankResponse.setAuthorized(true);
+    bankResponse.setAuthorizationCode("AUTH-123");
+
+    when(acquiringBankClient.authorize(any())).thenReturn(bankResponse);
+
+    PaymentRequest firstRequest = validRequest("4242424242424241");
+    PaymentRequest secondRequest = validRequest("4242424242424241");
+    secondRequest.setAmount(999);
+
+    mockMvc.perform(post("/api/payments")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(firstRequest)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.id").value(IDEMPOTENCY_KEY))
+        .andExpect(jsonPath("$.status").value("Authorized"));
+
+    mockMvc.perform(post("/api/payments")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(secondRequest)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("Rejected"))
+        .andExpect(jsonPath("$.messages[0]")
+            .value("Idempotency key has already been used with a different payment request"));
+  }
+
+  @Test
+  void shouldReturnSameResponseForDuplicateRequestWithSameIdempotencyKeyAndSamePayload() throws Exception {
+    BankingClientResponse bankResponse = new BankingClientResponse();
+    bankResponse.setAuthorized(true);
+    bankResponse.setAuthorizationCode("AUTH-123");
+
+    when(acquiringBankClient.authorize(any())).thenReturn(bankResponse);
+
+    PaymentRequest request = validRequest("4242424242424241");
+
+    mockMvc.perform(post("/api/payments")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.id").value(IDEMPOTENCY_KEY))
+        .andExpect(jsonPath("$.status").value("Authorized"));
+
+    mockMvc.perform(post("/api/payments")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.id").value(IDEMPOTENCY_KEY))
+        .andExpect(jsonPath("$.status").value("Authorized"));
+
+    verify(acquiringBankClient, times(1)).authorize(any());
   }
 
   private PaymentRequest validRequest(String cardNumber) {

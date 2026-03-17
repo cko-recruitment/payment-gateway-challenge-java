@@ -12,6 +12,30 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.util.List;
 
+/**
+ * Global exception handler for the payment gateway application.
+
+ * This class provides centralized exception handling across all controllers
+ * using Spring's {@link ControllerAdvice} mechanism. It ensures that exceptions
+ * are translated into consistent and meaningful HTTP responses for API clients.
+
+ * Responsibilities:
+ *   Catch and handle application-specific exceptions
+ *   Map exceptions to appropriate HTTP status codes
+ *   Provide structured error responses for clients
+ *   Log all exceptions for observability and debugging
+
+
+ * Error Handling Strategy:
+ *   Validation and business rule violations return HTTP 400 (Bad Request)
+ *   Resource not found errors return HTTP 404 (Not Found)
+ *   External system failures (e.g., bank unavailability) return HTTP 502 (Bad Gateway)
+ *   Unhandled exceptions return HTTP 500 (Internal Server Error)
+
+ * Consistency:
+ * Wherever applicable, errors are returned in structured response models such as
+ * {@link ErrorResponse} and {@link RejectedPaymentResponse}.
+ */
 @ControllerAdvice
 public class CommonExceptionHandler {
 

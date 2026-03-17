@@ -2,6 +2,10 @@ package com.checkout.payment.gateway.model;
 
 import java.util.List;
 
+/**
+ * Payment Response entity received from the payment gateway
+ * for REJECTED payments
+ */
 public class RejectedPaymentResponse {
 
   private String status;
