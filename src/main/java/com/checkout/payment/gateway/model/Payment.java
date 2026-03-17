@@ -10,6 +10,7 @@ import java.util.UUID;
 public class Payment {
   private UUID id;
   private PaymentStatus status;
+  private String requestFingerprint;
   private String maskedCardNumber;
   private String currency;
   private Integer amount;
@@ -18,11 +19,12 @@ public class Payment {
   private String authorizationCode;
   private Instant createdAt;
 
-  public Payment(UUID id, PaymentStatus status, String maskedCardNumber, String currency,
-      Integer amount, Integer expiryMonth, Integer expiryYear, String authorizationCode,
-      Instant createdAt) {
+  public Payment(UUID id, PaymentStatus status, String requestFingerprint, String maskedCardNumber,
+      String currency, Integer amount, Integer expiryMonth, Integer expiryYear,
+      String authorizationCode, Instant createdAt) {
     this.id = id;
     this.status = status;
+    this.requestFingerprint = requestFingerprint;
     this.maskedCardNumber = maskedCardNumber;
     this.currency = currency;
     this.amount = amount;
@@ -102,6 +104,14 @@ public class Payment {
 
   public void setAuthorizationCode(String authorizationCode) {
     this.authorizationCode = authorizationCode;
+  }
+
+  public String getRequestFingerprint() {
+    return requestFingerprint;
+  }
+
+  public void setRequestFingerprint(String requestFingerprint) {
+    this.requestFingerprint = requestFingerprint;
   }
 
   @Override

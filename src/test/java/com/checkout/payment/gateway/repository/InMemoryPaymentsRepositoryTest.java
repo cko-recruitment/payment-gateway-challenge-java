@@ -26,6 +26,7 @@ public class InMemoryPaymentsRepositoryTest {
     Payment payment = new Payment(
         id,
         PaymentStatus.AUTHORIZED,
+        "fingerPrint",
         "4241",
         "USD",
         100,

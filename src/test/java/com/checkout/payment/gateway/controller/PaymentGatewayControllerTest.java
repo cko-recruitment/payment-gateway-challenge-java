@@ -40,6 +40,10 @@ class PaymentGatewayControllerTest {
   @MockBean
   private AcquiringBankClient acquiringBankClient;
 
+  private static final String IDEMPOTENCY_KEY = "550e8400-e29b-41d4-a716-446655440000";
+  private static final String IDEMPOTENCY_KEY_2 = "550e8400-e29b-41d4-a716-446655440012";
+  private static final String IDEMPOTENCY_KEY_3 = "550e8400-e29b-41d4-a716-446655440023";
+
   @BeforeEach
   void setUp() {
     // If your repo supports clearing, do it here.
@@ -57,6 +61,7 @@ class PaymentGatewayControllerTest {
     PaymentRequest request = validRequest("4242424242424241");
 
     mockMvc.perform(post("/api/payment")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isCreated())
@@ -76,6 +81,7 @@ class PaymentGatewayControllerTest {
     PaymentRequest request = validRequest("4242424242424242");
 
     mockMvc.perform(post("/api/payment")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY_2)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isCreated())
@@ -98,6 +104,7 @@ class PaymentGatewayControllerTest {
         """;
 
     mockMvc.perform(post("/api/payment")
+            .header("Idempotency-Key", IDEMPOTENCY_KEY_3)
             .contentType(MediaType.APPLICATION_JSON)
             .content(invalidJson))
         .andExpect(status().isBadRequest())
@@ -112,6 +119,7 @@ class PaymentGatewayControllerTest {
     Payment payment = new Payment(
         paymentId,
         PaymentStatus.AUTHORIZED,
+        "fingerPrint",
         "4241",
         "USD",
         100,
