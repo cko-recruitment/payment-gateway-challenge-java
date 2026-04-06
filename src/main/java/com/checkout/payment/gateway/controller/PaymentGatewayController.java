@@ -56,7 +56,7 @@ public class PaymentGatewayController {
    * @param idempotencyKey a client-supplied UUID to ensure exactly-once processing
    * @return 200 OK with the payment result, or 400 if the request or key is invalid
    */
-  @PostMapping("/payment/processPayment")
+  @PostMapping("/payment/")
   public Mono<ResponseEntity<?>> processPayment(
       @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(
                   value = """

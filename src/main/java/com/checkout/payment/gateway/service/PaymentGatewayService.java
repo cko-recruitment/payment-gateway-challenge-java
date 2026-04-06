@@ -144,8 +144,7 @@ public class PaymentGatewayService {
               maskedCardNumber,
               bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED);
           paymentsRepository.add(response);
-          LOG.info("Processed payment with ID {}, status={}", response.getId(),
-              response.getStatus());
+
           return response;
         })
         // on error resume with a rejected response
@@ -154,7 +153,7 @@ public class PaymentGatewayService {
           PostPaymentResponse rejected = this.buildResponse(idempotencyKeyUuid, paymentRequest,
               maskedCardNumber, PaymentStatus.REJECTED);
           paymentsRepository.add(rejected);
-          LOG.info("Payment rejected due to bank error {}, ID={}", ex.getStatusCode(),
+          LOG.warn("Payment rejected due to bank error {}, ID={}", ex.getStatusCode(),
               rejected.getId());
           return Mono.just(rejected);
         })

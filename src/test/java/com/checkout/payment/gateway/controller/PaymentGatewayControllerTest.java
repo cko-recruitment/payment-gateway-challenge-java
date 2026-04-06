@@ -119,7 +119,7 @@ class PaymentGatewayControllerTest {
     when(paymentGatewayService.processPayment(any(), any(String.class)))
         .thenReturn(Mono.just(response));
 
-    webTestClient.post().uri("/payment/processPayment")
+    webTestClient.post().uri("/payment/")
         .contentType(MediaType.APPLICATION_JSON)
         .header("Idempotency-Key", UUID.randomUUID().toString())
         .bodyValue("""
@@ -146,7 +146,7 @@ class PaymentGatewayControllerTest {
   @Test
   @Order(3)
   void whenRequestHasInvalidCardNumberThenPaymentIsRejected() throws Exception {
-    mvc.perform(MockMvcRequestBuilders.post("/payment/processPayment")
+    mvc.perform(MockMvcRequestBuilders.post("/payment/")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -170,7 +170,7 @@ class PaymentGatewayControllerTest {
   @Test
   @Order(4)
   void whenRequestHasInvalidCurrencyThenPaymentIsRejected() throws Exception {
-    mvc.perform(MockMvcRequestBuilders.post("/payment/processPayment")
+    mvc.perform(MockMvcRequestBuilders.post("/payment/")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -193,7 +193,7 @@ class PaymentGatewayControllerTest {
   @Test
   @Order(5)
   void whenRequestHasExpiredExpiryDateThenPaymentIsRejected() throws Exception {
-    mvc.perform(MockMvcRequestBuilders.post("/payment/processPayment")
+    mvc.perform(MockMvcRequestBuilders.post("/payment/")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -219,7 +219,7 @@ class PaymentGatewayControllerTest {
     when(paymentGatewayService.processPayment(any(), eq(null)))
         .thenThrow(new EventProcessingException("Idempotency-Key header is required", HttpStatus.BAD_REQUEST));
 
-    mvc.perform(MockMvcRequestBuilders.post("/payment/processPayment")
+    mvc.perform(MockMvcRequestBuilders.post("/payment/")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -242,7 +242,7 @@ class PaymentGatewayControllerTest {
   @Test
   @Order(6)
   void whenRequestHasInvalidCvvThenPaymentIsRejected() throws Exception {
-    mvc.perform(MockMvcRequestBuilders.post("/payment/processPayment")
+    mvc.perform(MockMvcRequestBuilders.post("/payment/")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {

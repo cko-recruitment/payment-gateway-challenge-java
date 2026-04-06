@@ -32,7 +32,7 @@ The service starts on port `8090`. Swagger UI is available at:
 
 ## How it works
 
-- `POST /payment/processPayment` — submits a payment to the bank. Requires an `Idempotency-Key` UUID header.
+- `POST /payment/` — submits a payment to the bank. Requires an `Idempotency-Key` UUID header.
 - `GET /payment/{id}` — retrieves a previously processed payment by its ID.
 
 Payments can come back as `Authorized`, `Declined`, or `Rejected` depending on the bank response.
