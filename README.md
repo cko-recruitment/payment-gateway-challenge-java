@@ -1,25 +1,49 @@
-# Instructions for candidates
+# Payment Gateway
 
-This is the Java version of the Payment Gateway challenge. If you haven't already read this [README.md](https://github.com/cko-recruitment/) on the details of this exercise, please do so now.
+A Spring Boot service that processes card payments through a bank simulator and stores the results. Built with idempotency in mind — duplicate requests with the same key won't charge a card twice.
 
 ## Requirements
+
 - JDK 17
 - Docker
 
-## Template structure
+## Getting started
 
-src/ - A skeleton SpringBoot Application
+Start the bank simulator:
 
-test/ - Some simple JUnit tests
+```bash
+docker-compose up -d
+```
 
-imposters/ - contains the bank simulator configuration. Don't change this
+Run the application:
 
-.editorconfig - don't change this. It ensures a consistent set of rules for submissions when reformatting code
+```bash
+./gradlew bootRun
+```
 
-docker-compose.yml - configures the bank simulator
+The service starts on port `8090`. Swagger UI is available at:
+`http://localhost:8090/swagger-ui/index.html`
 
+## Running tests
 
-## API Documentation
-For documentation openAPI is included, and it can be found under the following url: **http://localhost:8090/swagger-ui/index.html**
+```bash
+./gradlew test
+```
 
-**Feel free to change the structure of the solution, use a different library etc.**
+## How it works
+
+- `POST /payment/processPayment` — submits a payment to the bank. Requires an `Idempotency-Key` UUID header.
+- `GET /payment/{id}` — retrieves a previously processed payment by its ID.
+
+Payments can come back as `Authorized`, `Declined`, or `Rejected` depending on the bank response.
+
+Idempotency is handled at two levels: completed payments are stored in the repository and returned directly on repeat requests, and in-flight requests with the same key share a single bank call.
+
+## Project structure
+
+```
+src/main/java       - Application source code
+src/test/java       - Unit and integration tests
+imposters/          - Bank simulator config (Mountebank)
+docker-compose.yml  - Starts the bank simulator
+```
