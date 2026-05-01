@@ -1,0 +1,58 @@
+server:
+  port: 8090
+  shutdown: GRACEFUL
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  retry:
+    instances:
+      mounteBank:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: false
+        retry-exceptions:
+          - com.checkout.payment.gateway.shared.exception.MounteBankException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+  circuitbreaker:
+    instances:
+      mounteBank:
+        record-exceptions:
+          - com.checkout.payment.gateway.shared.exception.MounteBankException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+
+configuration:
+  currencies:
+    - USD
+    - EUR
+    - GBP
+    - BRL
+
+client:
+  mounte-bank:
+    url: http://localhost:8080
+    connect-timeout-in-ms: 10000
+    read-timeout-in-ms: 10000
+
+logging:
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} [%X{X-Correlation-ID}] %clr(%5p) %clr(${PID}){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"

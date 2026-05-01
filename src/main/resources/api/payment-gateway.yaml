@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: Payment Gateway API
+  description: API for processing and retrieving card payments.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8090
+    description: Local server
+
+tags:
+  - name: Payments
+    description: Operations related to payments
+
+paths:
+  /v1/payments:
+    post:
+      tags:
+        - Payments
+      summary: Process a payment
+      operationId: processPayment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Unique key to ensure idempotency of the request.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '201':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '200':
+          description: Existing payment returned due to idempotency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '422':
+          description: Payment rejected due to invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/payments/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Retrieve payment details
+      operationId: getPaymentById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      x-class-extra-annotation: "@com.checkout.payment.gateway.shared.validation.ValidExpiryDate"
+      required:
+        - card_number
+        - expiry_month
+        - expiry_year
+        - currency
+        - amount
+        - cvv
+      properties:
+        card_number:
+          type: string
+          pattern: '^[0-9]{14,19}$'
+          x-pattern-message: 'must be between 14 and 19 digits'
+        expiry_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        expiry_year:
+          type: integer
+          default: 2030
+        currency:
+          $ref: '#/components/schemas/CurrencyEnum'
+        amount:
+          type: integer
+          minimum: 1
+        cvv:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+          x-pattern-message: 'must be 3 or 4 digits'
+
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        cardNumberLastFour:
+          type: string
+          pattern: '^[0-9]{4}$'
+          x-pattern-message: 'last four digits must be 4 digits'
+        expiryMonth:
+          type: integer
+        expiryYear:
+          type: integer
+        currency:
+          $ref: '#/components/schemas/CurrencyEnum'
+        amount:
+          type: integer
+
+    CurrencyEnum:
+      type: string
+      enum:
+        - GBP
+        - USD
+        - EUR
+        - BRL
+
+    PaymentStatusEnum:
+      type: string
+      enum:
+        - Authorized
+        - Declined
+        - Rejected
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
