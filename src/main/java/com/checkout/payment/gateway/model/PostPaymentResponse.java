@@ -83,7 +83,7 @@ public class PostPaymentResponse {
     response.setMessage(message);
     return response;
   }
-public static PostPaymentResponse decline(String message) {
+public static PostPaymentResponse declined(String message) {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.DECLINED);
     response.setMessage(message);

@@ -1,20 +1,20 @@
 package com.checkout.payment.gateway.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.checkout.payment.gateway.client.BankSimulatorClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.exception.BankProcessingException;
+import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
-import java.io.IOException;
-import java.util.Properties;
 import java.time.YearMonth;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,9 +22,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentGatewayServiceTest {
@@ -33,17 +30,13 @@ class PaymentGatewayServiceTest {
   private PaymentsRepository paymentsRepository;
 
   @Mock
-  private RestTemplate restTemplate;
+  private BankSimulatorClient bankSimulatorClient;
 
   private PaymentGatewayService paymentGatewayService;
 
   @BeforeEach
-  void setUp() throws IOException {
-    Properties properties = new Properties();
-    properties.load(getClass().getClassLoader().getResourceAsStream("application.properties"));
-    String bankUrl = properties.getProperty("bank.url");
-
-    paymentGatewayService = new PaymentGatewayService(paymentsRepository, restTemplate, bankUrl);
+  void setUp() {
+    paymentGatewayService = new PaymentGatewayService(paymentsRepository, bankSimulatorClient);
   }
 
   @Test
@@ -55,8 +48,7 @@ class PaymentGatewayServiceTest {
     bankResponse.setAuthorized(true);
     bankResponse.setAuthorizationCode("auth-123");
 
-    when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(BankPaymentResponse.class)))
-        .thenReturn(ResponseEntity.ok(bankResponse));
+    when(bankSimulatorClient.processPayment(request)).thenReturn(bankResponse);
 
     PostPaymentResponse response = paymentGatewayService.processPayment(request);
 
@@ -81,8 +73,7 @@ class PaymentGatewayServiceTest {
     bankResponse.setAuthorized(false);
     bankResponse.setAuthorizationCode("");
 
-    when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(BankPaymentResponse.class)))
-        .thenReturn(ResponseEntity.ok(bankResponse));
+    when(bankSimulatorClient.processPayment(request)).thenReturn(bankResponse);
 
     PostPaymentResponse response = paymentGatewayService.processPayment(request);
 
@@ -91,49 +82,56 @@ class PaymentGatewayServiceTest {
   }
 
   @Test
-  void shouldReturnRejectedWhenCardNumberIsInvalid() {
+  void shouldThrowPaymentValidationExceptionWhenCardNumberIsInvalid() {
     PostPaymentRequest request = buildRequest("4242424242424a", 12, YearMonth.now().getYear() + 1,
         "USD", 100, "123");
 
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
-
-    assertThat(response.getStatus()).isEqualTo(PaymentStatus.REJECTED);
-    assertThat(response.getId()).isNull();
-    assertThat(response.getMessage()).contains("Card number must only contain numeric characters");
+    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+        .isInstanceOf(PaymentValidationException.class)
+        .hasMessageContaining("Card number must only contain numeric characters");
 
     verify(paymentsRepository, never()).add(any());
-    verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+    verify(bankSimulatorClient, never()).processPayment(any());
   }
 
   @Test
-  void shouldReturnRejectedWhenCurrencyIsInvalid() {
+  void shouldThrowPaymentValidationExceptionWhenCurrencyIsInvalid() {
     PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
         "840", 1500, "123");
 
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
-
-    assertThat(response.getStatus()).isEqualTo(PaymentStatus.REJECTED);
-    assertThat(response.getId()).isNull();
-    assertThat(response.getMessage()).contains("Currency must only contain letters");
+    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+        .isInstanceOf(PaymentValidationException.class)
+        .hasMessageContaining("Currency must only contain letters");
 
     verify(paymentsRepository, never()).add(any());
-    verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+    verify(bankSimulatorClient, never()).processPayment(any());
   }
 
   @Test
-  void shouldReturnRejectedWhenMultipleValidationErrors() {
+  void shouldThrowPaymentValidationExceptionWhenMultipleValidationErrors() {
     PostPaymentRequest request = buildRequest("abc", 13, YearMonth.now().getYear() - 1,
         "US", -10, "12");
 
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
-
-    assertThat(response.getStatus()).isEqualTo(PaymentStatus.REJECTED);
-    assertThat(response.getId()).isNull();
-    assertThat(response.getMessage()).contains("Card number must only contain numeric characters");
-    assertThat(response.getMessage()).contains("Expiry month must be between 1 and 12");
+    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+        .isInstanceOf(PaymentValidationException.class)
+        .hasMessageContaining("Card number must only contain numeric characters")
+        .hasMessageContaining("Expiry month must be between 1 and 12");
 
     verify(paymentsRepository, never()).add(any());
-    verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+    verify(bankSimulatorClient, never()).processPayment(any());
+  }
+
+  @Test
+  void shouldPropagateBankProcessingException() {
+    PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
+        "USD", 100, "123");
+
+    when(bankSimulatorClient.processPayment(request))
+        .thenThrow(new BankProcessingException("Connection timeout"));
+
+    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+        .isInstanceOf(BankProcessingException.class)
+        .hasMessageContaining("Connection timeout");
   }
 
   private PostPaymentRequest buildRequest(String cardNumber,
