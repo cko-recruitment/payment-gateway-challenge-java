@@ -3,6 +3,7 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.exception.EventProcessingException;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.internal.BankResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -15,9 +16,11 @@ public class PaymentGatewayService {
   private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
 
   private final PaymentsRepository paymentsRepository;
+  private final BankClient bankClient;
 
-  public PaymentGatewayService(PaymentsRepository paymentsRepository) {
+  public PaymentGatewayService(PaymentsRepository paymentsRepository, BankClient bankClient) {
     this.paymentsRepository = paymentsRepository;
+    this.bankClient = bankClient;
   }
 
   public PostPaymentResponse getPaymentById(UUID id) {
@@ -26,6 +29,12 @@ public class PaymentGatewayService {
   }
 
   public UUID processPayment(PostPaymentRequest paymentRequest) {
-    return UUID.randomUUID();
+    LOG.debug("Received payment request {}", paymentRequest);
+    BankResponse bankResponse = bankClient.processPayment(paymentRequest);
+
+    var paymentResponse = PostPaymentResponse.of(paymentRequest, bankResponse);
+    paymentsRepository.add(paymentResponse);
+
+    return paymentResponse.getId();
   }
 }

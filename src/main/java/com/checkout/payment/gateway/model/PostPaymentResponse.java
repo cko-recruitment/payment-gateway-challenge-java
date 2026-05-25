@@ -1,6 +1,7 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.model.internal.BankResponse;
 import java.util.UUID;
 
 public class PostPaymentResponse {
@@ -12,6 +13,22 @@ public class PostPaymentResponse {
   private String currency;
   private int amount;
 
+  public static PostPaymentResponse of(PostPaymentRequest paymentRequest, BankResponse bankResponse) {
+    var postPaymentResponse = new PostPaymentResponse();
+
+    postPaymentResponse.setId(UUID.randomUUID());
+    postPaymentResponse.setStatus(
+        bankResponse.isAuthorized()? PaymentStatus.AUTHORIZED: PaymentStatus.DECLINED
+    );
+
+    postPaymentResponse.setCardNumberLastFour(paymentRequest.extractLastFour());
+    postPaymentResponse.setExpiryMonth(paymentRequest.getExpiryMonth());
+    postPaymentResponse.setExpiryYear(paymentRequest.getExpiryYear());
+    postPaymentResponse.setCurrency(paymentRequest.getCurrency());
+    postPaymentResponse.setAmount(paymentRequest.getAmount());
+
+    return postPaymentResponse;
+  }
 
   public UUID getId() {
     return id;
