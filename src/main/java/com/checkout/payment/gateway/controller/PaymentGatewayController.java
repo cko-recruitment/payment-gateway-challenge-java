@@ -1,14 +1,13 @@
 package com.checkout.payment.gateway.controller;
 
-import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.security.SecureLogger;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
+import java.util.Optional;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,11 +22,11 @@ import org.springframework.web.client.HttpServerErrorException;
 @RequestMapping("/api")
 public class PaymentGatewayController {
 
-  private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayController.class);
-
+  private final SecureLogger secureLogger;
   private final PaymentGatewayService paymentGatewayService;
 
-  public PaymentGatewayController(PaymentGatewayService paymentGatewayService) {
+  public PaymentGatewayController(SecureLogger secureLogger, PaymentGatewayService paymentGatewayService) {
+    this.secureLogger = secureLogger;
     this.paymentGatewayService = paymentGatewayService;
   }
 
@@ -38,26 +37,31 @@ public class PaymentGatewayController {
 
   @PostMapping("/payment")
   public ResponseEntity<PostPaymentResponse> processPayment(@RequestBody PostPaymentRequest paymentRequest) {
+    secureLogger.info("Processing payment request: {}", paymentRequest);
     try {
       return new ResponseEntity<>(paymentGatewayService.processPayment(paymentRequest), HttpStatus.OK);
     } catch (PaymentValidationException ex) {
-      LOG.warn("Payment request rejected: {}", ex.getMessage());
+      secureLogger.warn("Payment request rejected: {}", ex.getMessage());
       return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
     } catch (HttpServerErrorException ex) {
       if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-        LOG.error("Bank returned 503 Service Unavailable", ex);
+        secureLogger.error("Bank returned 503 Service Unavailable", ex);
         return new ResponseEntity<>(PostPaymentResponse.declined("Bank service temporarily unavailable"), HttpStatus.OK);
       }
-      LOG.error("Bank returned error: {}", ex.getStatusCode(), ex);
+      secureLogger.error("Bank returned error: {}", ex.getStatusCode());
       return new ResponseEntity<>(PostPaymentResponse.declined("Bank error: " + ex.getStatusCode()), HttpStatus.OK);
     } catch (BankProcessingException ex) {
-      LOG.error("Bank processing failed", ex);
+      secureLogger.error("Bank processing failed", ex);
       return new ResponseEntity<>(PostPaymentResponse.declined("Bank processing failed: " + ex.getMessage()), HttpStatus.OK);
     }
   }
 
   @GetMapping("/payment/{id}")
-  public ResponseEntity<PostPaymentResponse> getPostPaymentEventById(@PathVariable UUID id) {
-    return new ResponseEntity<>(paymentGatewayService.getPaymentById(id), HttpStatus.OK);
+  public ResponseEntity<PostPaymentResponse> getPostPaymentEventById(@PathVariable("id") UUID paymentId) {
+    secureLogger.debug("Requesting payment with ID: {}", paymentId);
+    Optional<PostPaymentResponse> paymentOpt = paymentGatewayService.getPaymentById(paymentId);
+    return paymentOpt
+        .map(payment -> ResponseEntity.ok(payment))
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
   }
 }

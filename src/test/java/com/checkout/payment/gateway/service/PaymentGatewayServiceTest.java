@@ -15,7 +15,10 @@ import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentRepository;
+import com.checkout.payment.gateway.security.SecureLogger;
 import java.time.YearMonth;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +30,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PaymentGatewayServiceTest {
 
   @Mock
+  private SecureLogger secureLogger;
+
+  @Mock
   private PaymentRepository paymentRepository;
 
   @Mock
@@ -36,7 +42,34 @@ class PaymentGatewayServiceTest {
 
   @BeforeEach
   void setUp() {
-    paymentGatewayService = new PaymentGatewayService(paymentRepository, bankClient);
+    paymentGatewayService = new PaymentGatewayService(secureLogger, paymentRepository, bankClient);
+  }
+
+  @Test
+  void shouldReturnPaymentWhenFound() {
+    UUID id = UUID.randomUUID();
+    PostPaymentResponse payment = new PostPaymentResponse();
+    payment.setId(id);
+    payment.setStatus(PaymentStatus.AUTHORIZED);
+
+    when(paymentRepository.get(id)).thenReturn(Optional.of(payment));
+
+    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentById(id);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().getId()).isEqualTo(id);
+    assertThat(result.get().getStatus()).isEqualTo(PaymentStatus.AUTHORIZED);
+  }
+
+  @Test
+  void shouldReturnEmptyWhenPaymentNotFound() {
+    UUID id = UUID.randomUUID();
+
+    when(paymentRepository.get(id)).thenReturn(Optional.empty());
+
+    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentById(id);
+
+    assertThat(result).isEmpty();
   }
 
   @Test

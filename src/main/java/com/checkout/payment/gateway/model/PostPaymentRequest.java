@@ -78,12 +78,12 @@ public class PostPaymentRequest implements Serializable {
   @Override
   public String toString() {
     return "PostPaymentRequest{" +
-        "cardNumber='" + (cardNumber == null ? "" :cardNumber.replaceAll("\\d", "*")) + '\'' +
+        "cardNumber='" + (cardNumber == null ? "" : "****" + cardNumber.substring(Math.max(0, cardNumber.length() - 4))) + '\'' +
         ", expiryMonth=" + expiryMonth +
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
-        ", cvv='" + cvv + '\'' +
+        ", cvv='" + (cvv == null ? "" : "*".repeat(cvv.length())) + '\'' +
         '}';
   }
 }

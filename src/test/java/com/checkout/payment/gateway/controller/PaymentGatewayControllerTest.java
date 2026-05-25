@@ -1,6 +1,5 @@
 package com.checkout.payment.gateway.controller;
 
-
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +21,7 @@ class PaymentGatewayControllerTest {
 
   @Autowired
   private MockMvc mvc;
+
   @Autowired
   InMemoryPaymentRepository paymentRepository;
 
@@ -51,7 +51,6 @@ class PaymentGatewayControllerTest {
   @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.get("/api/payment/" + UUID.randomUUID()))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.message").value("Payment not found"));
+        .andExpect(status().isNotFound());
   }
 }

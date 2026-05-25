@@ -7,38 +7,38 @@ import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentRepository;
+import com.checkout.payment.gateway.security.SecureLogger;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PaymentGatewayService {
 
-  private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
-
+  private final SecureLogger secureLogger;
   private final PaymentRepository paymentRepository;
   private final BankClient bankClient;
 
-  public PaymentGatewayService(PaymentRepository paymentRepository,
+  public PaymentGatewayService(SecureLogger secureLogger, PaymentRepository paymentRepository,
       BankClient bankClient) {
+    this.secureLogger = secureLogger;
     this.paymentRepository = paymentRepository;
     this.bankClient = bankClient;
   }
 
-  public PostPaymentResponse getPaymentById(UUID id) {
-    LOG.debug("Requesting access to payment with ID {}", id);
-    return paymentRepository.get(id)
-        .orElseThrow(() -> new com.checkout.payment.gateway.exception.PaymentNotFoundException("Payment not found"));
+  public Optional<PostPaymentResponse> getPaymentById(UUID id) {
+    secureLogger.debug("Requesting access to payment with ID {}", id);
+    return paymentRepository.get(id);
   }
 
   public PostPaymentResponse processPayment(PostPaymentRequest paymentRequest) {
+    secureLogger.info("Processing payment request: {}", paymentRequest);
     List<String> validationErrors = validateRequest(paymentRequest);
     if (!validationErrors.isEmpty()) {
-      LOG.warn("Payment request rejected: {}", validationErrors);
+      secureLogger.warn("Payment request rejected: {}", validationErrors);
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
@@ -55,6 +55,7 @@ public class PaymentGatewayService {
     response.setAmount(paymentRequest.getAmount());
 
     paymentRepository.add(response);
+    secureLogger.info("Payment processed successfully: id={}, status={}", response.getId(), response.getStatus());
     return response;
   }
 
