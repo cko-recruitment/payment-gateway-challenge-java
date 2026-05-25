@@ -14,7 +14,7 @@ import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentRepository;
+import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.security.SecureLogger;
 import java.time.YearMonth;
 import java.util.Optional;
@@ -22,7 +22,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,7 +32,7 @@ class PaymentGatewayServiceTest {
   private SecureLogger secureLogger;
 
   @Mock
-  private PaymentRepository paymentRepository;
+  private IdempotencyRepository idempotencyRepository;
 
   @Mock
   private BankClient bankClient;
@@ -42,32 +41,33 @@ class PaymentGatewayServiceTest {
 
   @BeforeEach
   void setUp() {
-    paymentGatewayService = new PaymentGatewayService(secureLogger, paymentRepository, bankClient);
+    paymentGatewayService = new PaymentGatewayService(secureLogger, idempotencyRepository, bankClient);
   }
 
   @Test
-  void shouldReturnPaymentWhenFound() {
-    UUID id = UUID.randomUUID();
+  void shouldReturnPaymentByDedupeKeyWhenFound() {
+    String merchantId = "merchant-123";
+    String key = "dedupe-key-123";
     PostPaymentResponse payment = new PostPaymentResponse();
-    payment.setId(id);
+    payment.setId(UUID.randomUUID());
     payment.setStatus(PaymentStatus.AUTHORIZED);
 
-    when(paymentRepository.get(id)).thenReturn(Optional.of(payment));
+    when(idempotencyRepository.getByKey(merchantId, key)).thenReturn(Optional.of(payment));
 
-    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentById(id);
+    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentByDedupeKey(merchantId, key);
 
     assertThat(result).isPresent();
-    assertThat(result.get().getId()).isEqualTo(id);
     assertThat(result.get().getStatus()).isEqualTo(PaymentStatus.AUTHORIZED);
   }
 
   @Test
-  void shouldReturnEmptyWhenPaymentNotFound() {
-    UUID id = UUID.randomUUID();
+  void shouldReturnEmptyWhenDedupeKeyNotFound() {
+    String merchantId = "merchant-123";
+    String key = "non-existent";
 
-    when(paymentRepository.get(id)).thenReturn(Optional.empty());
+    when(idempotencyRepository.getByKey(merchantId, key)).thenReturn(Optional.empty());
 
-    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentById(id);
+    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentByDedupeKey(merchantId, key);
 
     assertThat(result).isEmpty();
   }
@@ -83,7 +83,7 @@ class PaymentGatewayServiceTest {
 
     when(bankClient.processPayment(request)).thenReturn(bankResponse);
 
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
+    PostPaymentResponse response = paymentGatewayService.processPayment("merchant-123", request, null);
 
     assertThat(response).isNotNull();
     assertThat(response.getId()).isNotNull();
@@ -91,10 +91,24 @@ class PaymentGatewayServiceTest {
     assertThat(response.getCardNumberLastFour()).isEqualTo(4242);
     assertThat(response.getCurrency()).isEqualTo("USD");
     assertThat(response.getAmount()).isEqualTo(1050);
+  }
 
-    ArgumentCaptor<PostPaymentResponse> storedCaptor = ArgumentCaptor.forClass(PostPaymentResponse.class);
-    verify(paymentRepository).add(storedCaptor.capture());
-    assertThat(storedCaptor.getValue().getId()).isEqualTo(response.getId());
+  @Test
+  void shouldSaveDedupeKeyWhenProvided() {
+    PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
+        "USD", 100, "123");
+    String merchantId = "merchant-456";
+    String dedupeKey = "dedupe-key-456";
+
+    BankPaymentResponse bankResponse = new BankPaymentResponse();
+    bankResponse.setAuthorized(true);
+
+    when(bankClient.processPayment(request)).thenReturn(bankResponse);
+
+    PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, request, dedupeKey);
+
+    assertThat(response.getStatus()).isEqualTo(PaymentStatus.AUTHORIZED);
+    verify(idempotencyRepository).save(merchantId, dedupeKey, response);
   }
 
   @Test
@@ -108,7 +122,7 @@ class PaymentGatewayServiceTest {
 
     when(bankClient.processPayment(request)).thenReturn(bankResponse);
 
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
+    PostPaymentResponse response = paymentGatewayService.processPayment("merchant-123", request, null);
 
     assertThat(response.getStatus()).isEqualTo(PaymentStatus.DECLINED);
     assertThat(response.getCurrency()).isEqualTo("GBP");
@@ -119,11 +133,10 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = buildRequest("4242424242424a", 12, YearMonth.now().getYear() + 1,
         "USD", 100, "123");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
         .isInstanceOf(PaymentValidationException.class)
         .hasMessageContaining("Card number must only contain numeric characters");
 
-    verify(paymentRepository, never()).add(any());
     verify(bankClient, never()).processPayment(any());
   }
 
@@ -132,11 +145,10 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
         "840", 1500, "123");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
         .isInstanceOf(PaymentValidationException.class)
         .hasMessageContaining("Currency must only contain letters");
 
-    verify(paymentRepository, never()).add(any());
     verify(bankClient, never()).processPayment(any());
   }
 
@@ -145,12 +157,11 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = buildRequest("abc", 13, YearMonth.now().getYear() - 1,
         "US", -10, "12");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
         .isInstanceOf(PaymentValidationException.class)
         .hasMessageContaining("Card number must only contain numeric characters")
         .hasMessageContaining("Expiry month must be between 1 and 12");
 
-    verify(paymentRepository, never()).add(any());
     verify(bankClient, never()).processPayment(any());
   }
 
@@ -162,7 +173,7 @@ class PaymentGatewayServiceTest {
     when(bankClient.processPayment(request))
         .thenThrow(new BankProcessingException("Connection timeout"));
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment(request))
+    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
         .isInstanceOf(BankProcessingException.class)
         .hasMessageContaining("Connection timeout");
   }

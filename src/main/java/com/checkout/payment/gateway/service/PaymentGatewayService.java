@@ -6,7 +6,7 @@ import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentRepository;
+import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.security.SecureLogger;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -19,26 +19,26 @@ import org.springframework.stereotype.Service;
 public class PaymentGatewayService {
 
   private final SecureLogger secureLogger;
-  private final PaymentRepository paymentRepository;
+  private final IdempotencyRepository idempotencyRepository;
   private final BankClient bankClient;
 
-  public PaymentGatewayService(SecureLogger secureLogger, PaymentRepository paymentRepository,
-      BankClient bankClient) {
+  public PaymentGatewayService(SecureLogger secureLogger,
+      IdempotencyRepository idempotencyRepository, BankClient bankClient) {
     this.secureLogger = secureLogger;
-    this.paymentRepository = paymentRepository;
+    this.idempotencyRepository = idempotencyRepository;
     this.bankClient = bankClient;
   }
 
-  public Optional<PostPaymentResponse> getPaymentById(UUID id) {
-    secureLogger.debug("Requesting access to payment with ID {}", id);
-    return paymentRepository.get(id);
+  public Optional<PostPaymentResponse> getPaymentByDedupeKey(String merchantId, String dedupeKey) {
+    secureLogger.debug("Requesting payment by merchant={}, dedupeKey={}", merchantId, dedupeKey);
+    return idempotencyRepository.getByKey(merchantId, dedupeKey);
   }
 
-  public PostPaymentResponse processPayment(PostPaymentRequest paymentRequest) {
-    secureLogger.info("Processing payment request: {}", paymentRequest);
+  public PostPaymentResponse processPayment(String merchantId, PostPaymentRequest paymentRequest, String dedupeKey) {
+    secureLogger.info("Processing payment for merchant={}, request={}", merchantId, paymentRequest);
     List<String> validationErrors = validateRequest(paymentRequest);
     if (!validationErrors.isEmpty()) {
-      secureLogger.warn("Payment request rejected: {}", validationErrors);
+      secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, validationErrors);
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
@@ -54,8 +54,13 @@ public class PaymentGatewayService {
     response.setCurrency(paymentRequest.getCurrency().toUpperCase());
     response.setAmount(paymentRequest.getAmount());
 
-    paymentRepository.add(response);
-    secureLogger.info("Payment processed successfully: id={}, status={}", response.getId(), response.getStatus());
+    if (dedupeKey != null && !dedupeKey.isBlank()) {
+      idempotencyRepository.save(merchantId, dedupeKey, response);
+      secureLogger.info("Payment processed and dedupe saved: merchant={}, id={}, key={}", merchantId, response.getId(), dedupeKey);
+    } else {
+      secureLogger.info("Payment processed successfully: merchant={}, id={}, status={}", merchantId, response.getId(), response.getStatus());
+    }
+
     return response;
   }
 

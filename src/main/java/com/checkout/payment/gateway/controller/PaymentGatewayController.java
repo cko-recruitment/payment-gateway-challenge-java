@@ -7,13 +7,12 @@ import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.security.SecureLogger;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
 import java.util.Optional;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpServerErrorException;
@@ -29,39 +28,57 @@ public class PaymentGatewayController {
     this.secureLogger = secureLogger;
     this.paymentGatewayService = paymentGatewayService;
   }
-
-  @GetMapping("/hello")
-  public ResponseEntity<String> hello() {
-    return new ResponseEntity<>("Hello, world!", HttpStatus.OK);
-  }
-
-  @PostMapping("/payment")
-  public ResponseEntity<PostPaymentResponse> processPayment(@RequestBody PostPaymentRequest paymentRequest) {
-    secureLogger.info("Processing payment request: {}", paymentRequest);
-    try {
-      return new ResponseEntity<>(paymentGatewayService.processPayment(paymentRequest), HttpStatus.OK);
-    } catch (PaymentValidationException ex) {
-      secureLogger.warn("Payment request rejected: {}", ex.getMessage());
-      return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
-    } catch (HttpServerErrorException ex) {
-      if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-        secureLogger.error("Bank returned 503 Service Unavailable", ex);
-        return new ResponseEntity<>(PostPaymentResponse.declined("Bank service temporarily unavailable"), HttpStatus.OK);
-      }
-      secureLogger.error("Bank returned error: {}", ex.getStatusCode());
-      return new ResponseEntity<>(PostPaymentResponse.declined("Bank error: " + ex.getStatusCode()), HttpStatus.OK);
-    } catch (BankProcessingException ex) {
-      secureLogger.error("Bank processing failed", ex);
-      return new ResponseEntity<>(PostPaymentResponse.declined("Bank processing failed: " + ex.getMessage()), HttpStatus.OK);
+  
+  @GetMapping("/payment")
+  public ResponseEntity<PostPaymentResponse> getPayment(
+       @RequestHeader("Merchant-Id") String merchantId,
+       @RequestHeader(name = "Idempotency-Key", required = false) String dedupeKey) {
+    secureLogger.info("Retrieving payment for merchant={}, dedupeKey={}", merchantId, dedupeKey);
+    if (dedupeKey == null || dedupeKey.isBlank()) {
+      secureLogger.warn("Missing Idempotency-Key header for merchant={}", merchantId);
+      return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+    } 
+    Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, dedupeKey);
+    if (existing.isPresent()) {
+      secureLogger.info("Payment found for merchant={}, key={}", merchantId, dedupeKey);
+      return new ResponseEntity<>(existing.get(), HttpStatus.OK);
+    } else {
+      secureLogger.info("No payment found for merchant={}, key={}", merchantId, dedupeKey);
+      return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
   }
 
-  @GetMapping("/payment/{id}")
-  public ResponseEntity<PostPaymentResponse> getPostPaymentEventById(@PathVariable("id") UUID paymentId) {
-    secureLogger.debug("Requesting payment with ID: {}", paymentId);
-    Optional<PostPaymentResponse> paymentOpt = paymentGatewayService.getPaymentById(paymentId);
-    return paymentOpt
-        .map(payment -> ResponseEntity.ok(payment))
-        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+  @PostMapping("/payment")
+  public ResponseEntity<PostPaymentResponse> processPayment(
+       @RequestBody PostPaymentRequest paymentRequest,
+       @RequestHeader("Merchant-Id") String merchantId,
+       @RequestHeader(name = "Idempotency-Key", required = false) String dedupeKey) {
+    secureLogger.info("Processing payment for merchant={}, request={}, dedupeKey={}", merchantId, paymentRequest, dedupeKey);
+
+    if (dedupeKey != null && !dedupeKey.isBlank()) {
+      Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, dedupeKey);
+      if (existing.isPresent()) {
+        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
+        return new ResponseEntity<>(existing.get(), HttpStatus.OK);
+      }
+    }
+
+    try {
+      PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
+      return new ResponseEntity<>(response, HttpStatus.OK);
+    } catch (PaymentValidationException ex) {
+      secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
+      return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
+    } catch (HttpServerErrorException ex) {
+      if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+        secureLogger.error("Bank returned 503 Service Unavailable for merchant={}", merchantId, ex);
+        return new ResponseEntity<>(PostPaymentResponse.declined("Bank service temporarily unavailable"), HttpStatus.OK);
+      }
+      secureLogger.error("Bank returned error for merchant={}: {}", merchantId, ex.getStatusCode());
+      return new ResponseEntity<>(PostPaymentResponse.declined("Bank error: " + ex.getStatusCode()), HttpStatus.OK);
+    } catch (BankProcessingException ex) {
+      secureLogger.error("Bank processing failed for merchant={}", merchantId, ex);
+      return new ResponseEntity<>(PostPaymentResponse.declined("Bank processing failed: " + ex.getMessage()), HttpStatus.OK);
+    }
   }
 }

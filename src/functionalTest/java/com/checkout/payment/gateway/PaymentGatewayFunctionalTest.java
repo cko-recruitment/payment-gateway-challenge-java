@@ -12,7 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 @SpringBootTest(webEnvironment = WebEnvironment.DEFINED_PORT)
@@ -25,8 +28,7 @@ class PaymentGatewayFunctionalTest {
   void shouldAuthorizePaymentWithOddCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424241", "USD", 1050);
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -41,8 +43,7 @@ class PaymentGatewayFunctionalTest {
   void shouldDeclinePaymentWithEvenCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424242", "GBP", 2500);
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -55,8 +56,7 @@ class PaymentGatewayFunctionalTest {
   void shouldRejectPaymentWithInvalidCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424abc", "USD", 100);
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -71,8 +71,7 @@ class PaymentGatewayFunctionalTest {
     request.setExpiryMonth(13);
     request.setExpiryYear(YearMonth.now().getYear());
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -85,8 +84,7 @@ class PaymentGatewayFunctionalTest {
   void shouldRejectPaymentWithInvalidCurrency() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424242", "840", 1500);
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -105,8 +103,7 @@ class PaymentGatewayFunctionalTest {
     request.setAmount(-10);
     request.setCvv("12");
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -116,35 +113,45 @@ class PaymentGatewayFunctionalTest {
   }
 
   @Test
-  void shouldRetrievePreviouslyCreatedPayment() {
-    PostPaymentRequest request = buildPaymentRequest("4242424242424241", "EUR", 999);
+  void shouldReturnSameResponseForSameDedupeKey() {
+    PostPaymentRequest request = buildPaymentRequest("4242424242424241", "USD", 100);
+    String merchantId = "merchant-abc";
+    String dedupeKey = "dedupe-key-123";
 
-    ResponseEntity<PostPaymentResponse> createResponse = restTemplate.postForEntity(
-        "/api/payment", request, PostPaymentResponse.class);
+    ResponseEntity<PostPaymentResponse> response1 = postPayment(merchantId, dedupeKey, request);
+    ResponseEntity<PostPaymentResponse> response2 = postPayment(merchantId, dedupeKey, request);
 
-    assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(createResponse.getBody()).isNotNull();
-    UUID paymentId = createResponse.getBody().getId();
-
-    ResponseEntity<PostPaymentResponse> getResponse = restTemplate.getForEntity(
-        "/api/payment/{id}", PostPaymentResponse.class, paymentId);
-
-    assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(getResponse.getBody()).isNotNull();
-    assertThat(getResponse.getBody().getId()).isEqualTo(paymentId);
-    assertThat(getResponse.getBody().getStatus()).isEqualTo(PaymentStatus.AUTHORIZED);
-    assertThat(getResponse.getBody().getCurrency()).isEqualTo("EUR");
-    assertThat(getResponse.getBody().getAmount()).isEqualTo(999);
+    assertThat(response1.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response2.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response1.getBody().getId()).isEqualTo(response2.getBody().getId());
   }
 
   @Test
-  void shouldReturn404WhenPaymentNotFound() {
-    UUID randomId = UUID.randomUUID();
+  void shouldCreateDifferentPaymentsForDifferentMerchantsWithSameDedupeKey() {
+    PostPaymentRequest request = buildPaymentRequest("4242424242424241", "USD", 100);
+    String dedupeKey = "dedupe-key-shared";
 
-    ResponseEntity<PostPaymentResponse> response = restTemplate.getForEntity(
-        "/api/payment/{id}", PostPaymentResponse.class, randomId);
+    ResponseEntity<PostPaymentResponse> response1 = postPayment("merchant-a", dedupeKey, request);
+    ResponseEntity<PostPaymentResponse> response2 = postPayment("merchant-b", dedupeKey, request);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(response1.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response2.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response1.getBody().getId()).isNotEqualTo(response2.getBody().getId());
+  }
+
+  private ResponseEntity<PostPaymentResponse> postPayment(String merchantId, PostPaymentRequest request) {
+    return postPayment(merchantId, null, request);
+  }
+
+  private ResponseEntity<PostPaymentResponse> postPayment(String merchantId, String dedupeKey, PostPaymentRequest request) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.set("Merchant-Id", merchantId);
+    if (dedupeKey != null) {
+      headers.set("Idempotency-Key", dedupeKey);
+    }
+    HttpEntity<PostPaymentRequest> entity = new HttpEntity<>(request, headers);
+    return restTemplate.postForEntity("/api/payment", entity, PostPaymentResponse.class);
   }
 
   private PostPaymentRequest buildPaymentRequest(String cardNumber, String currency, int amount) {

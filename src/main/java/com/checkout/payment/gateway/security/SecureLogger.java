@@ -1,7 +1,5 @@
 package com.checkout.payment.gateway.security;
 
-import java.util.HashMap;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -10,13 +8,9 @@ import org.springframework.stereotype.Component;
 public class SecureLogger {
 
   private final Logger logger;
-  private final Map<String, MaskingStrategy> strategies = new HashMap<>();
 
   public SecureLogger() {
     this.logger = LoggerFactory.getLogger(SecureLogger.class);
-    strategies.put("card_number", new CardNumberMaskingStrategy());
-    strategies.put("cvv", new CvvMaskingStrategy());
-    strategies.put("cardNumber", new CardNumberMaskingStrategy());
   }
 
   public void info(String message, Object... args) {
@@ -47,8 +41,6 @@ public class SecureLogger {
     if (obj == null) {
       return null;
     }
-    // TODO: Implement reflection-based masking for objects with sensitive fields
-    // For now, return toString() which should be secured in the model
     return obj;
   }
 }
