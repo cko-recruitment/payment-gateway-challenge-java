@@ -11,7 +11,7 @@ public class PostPaymentResponse {
   private int expiryYear;
   private String currency;
   private int amount;
-
+  private String message;
 
   public UUID getId() {
     return id;
@@ -69,9 +69,24 @@ public class PostPaymentResponse {
     this.amount = amount;
   }
 
+  public String getMessage() {
+    return message;
+  }
+
+  public void setMessage(String message) {
+    this.message = message;
+  }
+
+  public static PostPaymentResponse rejected(String message) {
+    PostPaymentResponse response = new PostPaymentResponse();
+    response.setStatus(PaymentStatus.REJECTED);
+    response.setMessage(message);
+    return response;
+  }
+
   @Override
   public String toString() {
-    return "GetPaymentResponse{" +
+    return "PostPaymentResponse{" +
         "id=" + id +
         ", status=" + status +
         ", cardNumberLastFour=" + cardNumberLastFour +
@@ -79,6 +94,7 @@ public class PostPaymentResponse {
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
+        ", message='" + message + '\'' +
         '}';
   }
 }
