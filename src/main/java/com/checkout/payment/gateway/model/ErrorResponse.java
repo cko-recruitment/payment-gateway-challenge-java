@@ -1,8 +1,11 @@
 package com.checkout.payment.gateway.model;
 
 public class ErrorResponse {
-  private final String code;
-  private final String message;
+  private String code;
+  private String message;
+
+  public ErrorResponse() {
+  }
 
   public ErrorResponse(String code, String message) {
     this.code = code;

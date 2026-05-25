@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+    id 'idea'
+    id 'eclipse'
     id 'org.springframework.boot' version '3.1.5'
     id 'io.spring.dependency-management' version '1.0.15.RELEASE'
 }
@@ -26,8 +28,15 @@ sourceSets {
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')
-        compileClasspath += sourceSets.main.output
-        runtimeClasspath += sourceSets.main.output
+        compileClasspath += sourceSets.main.output + sourceSets.test.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+    }
+
+    functionalTest {
+        java.srcDir file('src/functionalTest/java')
+        resources.srcDir file('src/functionalTest/resources')
+        compileClasspath += sourceSets.main.output + sourceSets.test.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.test.output
     }
 }
 
@@ -36,6 +45,11 @@ configurations {
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     integrationTestCompileOnly.extendsFrom compileOnly
     integrationTestAnnotationProcessor.extendsFrom annotationProcessor
+
+    functionalTestImplementation.extendsFrom testImplementation
+    functionalTestRuntimeOnly.extendsFrom testRuntimeOnly
+    functionalTestCompileOnly.extendsFrom compileOnly
+    functionalTestAnnotationProcessor.extendsFrom annotationProcessor
 }
 
 task integrationTest(type: Test) {
@@ -46,6 +60,44 @@ task integrationTest(type: Test) {
     useJUnitPlatform()
 }
 
-tasks.named('test') {
+task functionalTest(type: Test) {
+    description = 'Runs functional tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
     useJUnitPlatform()
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
+    }
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "\nTest result: ${result.resultType}"
+            println "Tests: ${result.testCount}, Passed: ${result.successfulTestCount}, Failed: ${result.failedTestCount}, Skipped: ${result.skippedTestCount}"
+        }
+    }
+}
+
+// IDE support: mark custom sourceSets as test sources
+idea {
+    module {
+        testSources.from(sourceSets.integrationTest.java.srcDirs)
+        testSources.from(sourceSets.functionalTest.java.srcDirs)
+        testResources.from(sourceSets.integrationTest.resources.srcDirs)
+        testResources.from(sourceSets.functionalTest.resources.srcDirs)
+    }
+}
+
+// Eclipse support
+eclipse {
+    classpath {
+        plusConfigurations += [configurations.integrationTestRuntimeClasspath, configurations.functionalTestRuntimeClasspath]
+    }
 }

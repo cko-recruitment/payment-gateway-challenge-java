@@ -43,32 +43,77 @@ public class PaymentGatewayService {
 
   public PostPaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to payment with ID {}", id);
-    return paymentsRepository.get(id)
-        .orElseThrow(() -> new PaymentNotFoundException("Payment not found"));
+    try{
+      return paymentsRepository.get(id)
+          .orElseThrow(() -> new PaymentNotFoundException("Payment not found"));
+    } catch (PaymentNotFoundException ex) {
+      LOG.warn("Payment with ID {} not found", id);
+      throw ex;
+    }
+    
   }
 
   public PostPaymentResponse processPayment(PostPaymentRequest paymentRequest) {
     List<String> validationErrors = validateRequest(paymentRequest);
     if (!validationErrors.isEmpty()) {
       LOG.warn("Payment request rejected: {}", validationErrors);
+      // TBD : debugging purpose only, in production we would not return such detailed error messages
       return PostPaymentResponse.rejected(String.join("; ", validationErrors));
     }
+    try{
+        BankPaymentResponse bankResponse = callBank(paymentRequest);
+        PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
 
-    BankPaymentResponse bankResponse = callBank(paymentRequest);
+        PostPaymentResponse response = new PostPaymentResponse();
+        response.setId(UUID.randomUUID());
+        response.setStatus(status);
+        response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
+        response.setExpiryMonth(paymentRequest.getExpiryMonth());
+        response.setExpiryYear(paymentRequest.getExpiryYear());
+        response.setCurrency(paymentRequest.getCurrency().toUpperCase());
+        response.setAmount(paymentRequest.getAmount());
 
-    PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
+        paymentsRepository.add(response);
+        return response;
+    }catch (BankProcessingException ex) {
+      LOG.error("Payment processing failed", ex);
+      // TBD : it is a kind of decline or retriable error? 
+      return PostPaymentResponse.decline("Payment processing failed: " + ex.getMessage());
+    }
+    
+  }
+  /*
+    * In a real application, this would be an asynchronous call to the bank's API, and we would have a callback endpoint to receive the response. 
+    * For simplicity, we are making a synchronous call here and returning the response directly.
+    * We also assume that the bank's API is reliable and will respond within a reasonable time frame. In a real application, we would need to handle timeouts and retries.
+  */
+  private BankPaymentResponse callBank(PostPaymentRequest paymentRequest) {
+    Map<String, Object> requestBody = new HashMap<>();
+    requestBody.put("card_number", paymentRequest.getCardNumber());
+    requestBody.put("expiry_date", paymentRequest.getExpiryDate());
+    requestBody.put("currency", paymentRequest.getCurrency().toUpperCase());
+    requestBody.put("amount", paymentRequest.getAmount());
+    requestBody.put("cvv", paymentRequest.getCvv());
 
-    PostPaymentResponse response = new PostPaymentResponse();
-    response.setId(UUID.randomUUID());
-    response.setStatus(status);
-    response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
-    response.setExpiryMonth(paymentRequest.getExpiryMonth());
-    response.setExpiryYear(paymentRequest.getExpiryYear());
-    response.setCurrency(paymentRequest.getCurrency().toUpperCase());
-    response.setAmount(paymentRequest.getAmount());
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
 
-    paymentsRepository.add(response);
-    return response;
+    try {
+      ResponseEntity<BankPaymentResponse> response = restTemplate.postForEntity(bankUrl, httpEntity, BankPaymentResponse.class);
+      BankPaymentResponse body = response.getBody();
+      if (body == null) {
+        throw new BankProcessingException("Bank returned an empty response");
+      }
+      return body;
+    } catch (HttpStatusCodeException ex) {
+      String message = "Bank returned status " + ex.getStatusCode();
+      LOG.error(message, ex);
+      throw new BankProcessingException(message, ex);
+    } catch (Exception ex) {
+      LOG.error("Bank call failed", ex);
+      throw new BankProcessingException("Cannot reach acquiring bank", ex);
+    }
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {
@@ -130,32 +175,4 @@ public class PaymentGatewayService {
     return errors;
   }
 
-  private BankPaymentResponse callBank(PostPaymentRequest paymentRequest) {
-    Map<String, Object> requestBody = new HashMap<>();
-    requestBody.put("card_number", paymentRequest.getCardNumber());
-    requestBody.put("expiry_date", paymentRequest.getExpiryDate());
-    requestBody.put("currency", paymentRequest.getCurrency().toUpperCase());
-    requestBody.put("amount", paymentRequest.getAmount());
-    requestBody.put("cvv", paymentRequest.getCvv());
-
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
-
-    try {
-      ResponseEntity<BankPaymentResponse> response = restTemplate.postForEntity(bankUrl, httpEntity, BankPaymentResponse.class);
-      BankPaymentResponse body = response.getBody();
-      if (body == null) {
-        throw new BankProcessingException("Bank returned an empty response");
-      }
-      return body;
-    } catch (HttpStatusCodeException ex) {
-      String message = "Bank returned status " + ex.getStatusCode();
-      LOG.error(message, ex);
-      throw new BankProcessingException(message, ex);
-    } catch (Exception ex) {
-      LOG.error("Bank call failed", ex);
-      throw new BankProcessingException("Cannot reach acquiring bank", ex);
-    }
-  }
 }
