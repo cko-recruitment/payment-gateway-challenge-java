@@ -17,7 +17,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 @Component
-public class BankSimulatorClient {
+public class BankSimulatorClient implements BankClient {
 
   private static final Logger LOG = LoggerFactory.getLogger(BankSimulatorClient.class);
 

@@ -7,14 +7,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.checkout.payment.gateway.client.BankSimulatorClient;
+import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.repository.PaymentRepository;
 import java.time.YearMonth;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,16 +27,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PaymentGatewayServiceTest {
 
   @Mock
-  private PaymentsRepository paymentsRepository;
+  private PaymentRepository paymentRepository;
 
   @Mock
-  private BankSimulatorClient bankSimulatorClient;
+  private BankClient bankClient;
 
   private PaymentGatewayService paymentGatewayService;
 
   @BeforeEach
   void setUp() {
-    paymentGatewayService = new PaymentGatewayService(paymentsRepository, bankSimulatorClient);
+    paymentGatewayService = new PaymentGatewayService(paymentRepository, bankClient);
   }
 
   @Test
@@ -48,7 +48,7 @@ class PaymentGatewayServiceTest {
     bankResponse.setAuthorized(true);
     bankResponse.setAuthorizationCode("auth-123");
 
-    when(bankSimulatorClient.processPayment(request)).thenReturn(bankResponse);
+    when(bankClient.processPayment(request)).thenReturn(bankResponse);
 
     PostPaymentResponse response = paymentGatewayService.processPayment(request);
 
@@ -60,7 +60,7 @@ class PaymentGatewayServiceTest {
     assertThat(response.getAmount()).isEqualTo(1050);
 
     ArgumentCaptor<PostPaymentResponse> storedCaptor = ArgumentCaptor.forClass(PostPaymentResponse.class);
-    verify(paymentsRepository).add(storedCaptor.capture());
+    verify(paymentRepository).add(storedCaptor.capture());
     assertThat(storedCaptor.getValue().getId()).isEqualTo(response.getId());
   }
 
@@ -73,7 +73,7 @@ class PaymentGatewayServiceTest {
     bankResponse.setAuthorized(false);
     bankResponse.setAuthorizationCode("");
 
-    when(bankSimulatorClient.processPayment(request)).thenReturn(bankResponse);
+    when(bankClient.processPayment(request)).thenReturn(bankResponse);
 
     PostPaymentResponse response = paymentGatewayService.processPayment(request);
 
@@ -90,8 +90,8 @@ class PaymentGatewayServiceTest {
         .isInstanceOf(PaymentValidationException.class)
         .hasMessageContaining("Card number must only contain numeric characters");
 
-    verify(paymentsRepository, never()).add(any());
-    verify(bankSimulatorClient, never()).processPayment(any());
+    verify(paymentRepository, never()).add(any());
+    verify(bankClient, never()).processPayment(any());
   }
 
   @Test
@@ -103,8 +103,8 @@ class PaymentGatewayServiceTest {
         .isInstanceOf(PaymentValidationException.class)
         .hasMessageContaining("Currency must only contain letters");
 
-    verify(paymentsRepository, never()).add(any());
-    verify(bankSimulatorClient, never()).processPayment(any());
+    verify(paymentRepository, never()).add(any());
+    verify(bankClient, never()).processPayment(any());
   }
 
   @Test
@@ -117,8 +117,8 @@ class PaymentGatewayServiceTest {
         .hasMessageContaining("Card number must only contain numeric characters")
         .hasMessageContaining("Expiry month must be between 1 and 12");
 
-    verify(paymentsRepository, never()).add(any());
-    verify(bankSimulatorClient, never()).processPayment(any());
+    verify(paymentRepository, never()).add(any());
+    verify(bankClient, never()).processPayment(any());
   }
 
   @Test
@@ -126,7 +126,7 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
         "USD", 100, "123");
 
-    when(bankSimulatorClient.processPayment(request))
+    when(bankClient.processPayment(request))
         .thenThrow(new BankProcessingException("Connection timeout"));
 
     assertThatThrownBy(() -> paymentGatewayService.processPayment(request))

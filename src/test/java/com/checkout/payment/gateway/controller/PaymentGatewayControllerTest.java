@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.repository.InMemoryPaymentRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,7 @@ class PaymentGatewayControllerTest {
   @Autowired
   private MockMvc mvc;
   @Autowired
-  PaymentsRepository paymentsRepository;
+  InMemoryPaymentRepository paymentRepository;
 
   @Test
   void whenPaymentWithIdExistThenCorrectPaymentIsReturned() throws Exception {
@@ -36,7 +36,7 @@ class PaymentGatewayControllerTest {
     payment.setExpiryYear(2024);
     payment.setCardNumberLastFour(4321);
 
-    paymentsRepository.add(payment);
+    paymentRepository.add(payment);
 
     mvc.perform(MockMvcRequestBuilders.get("/api/payment/" + payment.getId()))
         .andExpect(status().isOk())

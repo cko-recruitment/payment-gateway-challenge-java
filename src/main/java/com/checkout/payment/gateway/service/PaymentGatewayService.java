@@ -1,12 +1,12 @@
 package com.checkout.payment.gateway.service;
 
-import com.checkout.payment.gateway.client.BankSimulatorClient;
+import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.repository.PaymentRepository;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,18 +20,18 @@ public class PaymentGatewayService {
 
   private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
 
-  private final PaymentsRepository paymentsRepository;
-  private final BankSimulatorClient bankSimulatorClient;
+  private final PaymentRepository paymentRepository;
+  private final BankClient bankClient;
 
-  public PaymentGatewayService(PaymentsRepository paymentsRepository,
-      BankSimulatorClient bankSimulatorClient) {
-    this.paymentsRepository = paymentsRepository;
-    this.bankSimulatorClient = bankSimulatorClient;
+  public PaymentGatewayService(PaymentRepository paymentRepository,
+      BankClient bankClient) {
+    this.paymentRepository = paymentRepository;
+    this.bankClient = bankClient;
   }
 
   public PostPaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to payment with ID {}", id);
-    return paymentsRepository.get(id)
+    return paymentRepository.get(id)
         .orElseThrow(() -> new com.checkout.payment.gateway.exception.PaymentNotFoundException("Payment not found"));
   }
 
@@ -42,7 +42,7 @@ public class PaymentGatewayService {
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
-    BankPaymentResponse bankResponse = bankSimulatorClient.processPayment(paymentRequest);
+    BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
     PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
 
     PostPaymentResponse response = new PostPaymentResponse();
@@ -54,7 +54,7 @@ public class PaymentGatewayService {
     response.setCurrency(paymentRequest.getCurrency().toUpperCase());
     response.setAmount(paymentRequest.getAmount());
 
-    paymentsRepository.add(response);
+    paymentRepository.add(response);
     return response;
   }
 
