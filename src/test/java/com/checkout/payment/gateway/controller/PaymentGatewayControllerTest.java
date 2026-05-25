@@ -58,7 +58,7 @@ class PaymentGatewayControllerTest {
     when(paymentGatewayService.getPaymentByDedupeKey("merchant-123", "dedupe-abc"))
         .thenReturn(Optional.of(payment));
 
-    mvc.perform(post("/api/payment")
+    mvc.perform(post("/api/v1/payments")
             .header("Merchant-Id", "merchant-123")
             .header("Idempotency-Key", "dedupe-abc")
             .contentType(MediaType.APPLICATION_JSON)
@@ -68,7 +68,7 @@ class PaymentGatewayControllerTest {
   }
 
   @Test
-  void whenGetPaymentWithExistingDedupeKeyThenReturnPayment() throws Exception {
+  void whenGetPaymentByIdempotencyKeyExistsThenReturnPayment() throws Exception {
     UUID id = UUID.randomUUID();
     PostPaymentResponse payment = new PostPaymentResponse();
     payment.setId(id);
@@ -82,19 +82,33 @@ class PaymentGatewayControllerTest {
     when(paymentGatewayService.getPaymentByDedupeKey("merchant-123", "dedupe-abc"))
         .thenReturn(Optional.of(payment));
 
-    mvc.perform(get("/api/payment")
-            .header("Merchant-Id", "merchant-123")
-            .header("Idempotency-Key", "dedupe-abc"))
+    mvc.perform(get("/api/v1/payments/idempotency/dedupe-abc")
+            .header("Merchant-Id", "merchant-123"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(id.toString()))
         .andExpect(jsonPath("$.status").value("Authorized"));
   }
 
   @Test
-  void whenGetPaymentMissingDedupeKeyThenReturnBadRequest() throws Exception {
-    mvc.perform(get("/api/payment")
+  void whenGetPaymentByIdExistsThenReturnPayment() throws Exception {
+    UUID id = UUID.randomUUID();
+    PostPaymentResponse payment = new PostPaymentResponse();
+    payment.setId(id);
+    payment.setAmount(10);
+    payment.setCurrency("USD");
+    payment.setStatus(PaymentStatus.AUTHORIZED);
+    payment.setExpiryMonth(12);
+    payment.setExpiryYear(2024);
+    payment.setCardNumberLastFour(4321);
+
+    when(paymentGatewayService.getPaymentById("merchant-123", id))
+        .thenReturn(Optional.of(payment));
+
+    mvc.perform(get("/api/v1/payments/" + id)
             .header("Merchant-Id", "merchant-123"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(id.toString()))
+        .andExpect(jsonPath("$.status").value("Authorized"));
   }
 
   @Test
@@ -121,8 +135,9 @@ class PaymentGatewayControllerTest {
         "\"cvv\":\"123\"" +
         "}";
 
-    mvc.perform(post("/api/payment")
+    mvc.perform(post("/api/v1/payments")
             .header("Merchant-Id", "merchant-123")
+            .header("Idempotency-Key", "dedupe-123")
             .contentType(MediaType.APPLICATION_JSON)
             .content(requestJson))
         .andExpect(status().isOk())
@@ -136,7 +151,7 @@ class PaymentGatewayControllerTest {
   void shouldReturnRejectedResponseWhenValidationFails() throws Exception {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.REJECTED);
-    response.setMessage("Currency must be one of: [USD, EUR, GBP]");
+    response.setErrorMessage("Currency must be one of: [USD, EUR, GBP]");
 
     when(paymentGatewayService.processPayment(anyString(), any(PostPaymentRequest.class), any()))
         .thenReturn(response);
@@ -151,8 +166,9 @@ class PaymentGatewayControllerTest {
         "\"cvv\":\"123\"" +
         "}";
 
-    mvc.perform(post("/api/payment")
+    mvc.perform(post("/api/v1/payments")
             .header("Merchant-Id", "merchant-123")
+            .header("Idempotency-Key", "dedupe-reject")
             .contentType(MediaType.APPLICATION_JSON)
             .content(requestJson))
         .andExpect(status().isOk())

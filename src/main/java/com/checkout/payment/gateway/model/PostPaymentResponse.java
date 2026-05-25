@@ -1,9 +1,10 @@
 package com.checkout.payment.gateway.model;
 
+import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import java.util.UUID;
 
-public class PostPaymentResponse {
+public class PostPaymentResponse extends BasePaymentResponse{
   private UUID id;
   private PaymentStatus status;
   private int cardNumberLastFour;
@@ -11,7 +12,6 @@ public class PostPaymentResponse {
   private int expiryYear;
   private String currency;
   private int amount;
-  private String message;
 
   public UUID getId() {
     return id;
@@ -69,18 +69,11 @@ public class PostPaymentResponse {
     this.amount = amount;
   }
 
-  public String getMessage() {
-    return message;
-  }
-
-  public void setMessage(String message) {
-    this.message = message;
-  }
-
   public static PostPaymentResponse rejected(String message) {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.REJECTED);
     response.setMessage(message);
+    response.setGatewayCode(GatewayCode.INVALID_REQUEST);
     return response;
   }
 
@@ -88,6 +81,7 @@ public class PostPaymentResponse {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.DECLINED);
     response.setMessage(message);
+    response.setGatewayCode(GatewayCode.DECLINED);
     return response;
   }
 
@@ -101,7 +95,6 @@ public class PostPaymentResponse {
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
-        ", message='" + message + '\'' +
         '}';
   }
 }

@@ -1,6 +1,7 @@
 package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.client.BankClient;
+import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
@@ -34,6 +35,11 @@ public class PaymentGatewayService {
     return idempotencyRepository.getByKey(merchantId, dedupeKey);
   }
 
+  public Optional<PostPaymentResponse> getPaymentById(String merchantId, UUID id) {
+    secureLogger.debug("Requesting payment by merchant={}, id={}", merchantId, id);
+    return idempotencyRepository.getById(merchantId, id);
+  }
+
   public PostPaymentResponse processPayment(String merchantId, PostPaymentRequest paymentRequest, String dedupeKey) {
     secureLogger.info("Processing payment for merchant={}, request={}", merchantId, paymentRequest);
     List<String> validationErrors = validateRequest(paymentRequest);
@@ -53,6 +59,12 @@ public class PaymentGatewayService {
     response.setExpiryYear(paymentRequest.getExpiryYear());
     response.setCurrency(paymentRequest.getCurrency().toUpperCase());
     response.setAmount(paymentRequest.getAmount());
+
+    if (status == PaymentStatus.AUTHORIZED) {
+      response.setGatewayCode(GatewayCode.SUCCESS);
+    } else {
+      response.setGatewayCode(GatewayCode.DECLINED);
+    }
 
     if (dedupeKey != null && !dedupeKey.isBlank()) {
       idempotencyRepository.save(merchantId, dedupeKey, response);
@@ -99,8 +111,12 @@ public class PaymentGatewayService {
       String currency = request.getCurrency().trim().toUpperCase();
       if (currency.length() != 3) {
         errors.add("Currency must be 3 characters long");
-      } else if (!currency.matches("[A-Z]{3}")) {
-        errors.add("Currency must only contain letters");
+      } else {
+        try {
+          java.util.Currency.getInstance(currency);
+        } catch (IllegalArgumentException e) {
+          errors.add("Invalid ISO 4217 currency code");
+        }
       }
     }
 

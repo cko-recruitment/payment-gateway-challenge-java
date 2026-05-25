@@ -28,7 +28,7 @@ class PaymentGatewayFunctionalTest {
   void shouldAuthorizePaymentWithOddCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424241", "USD", 1050);
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", UUID.randomUUID().toString(),request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -43,7 +43,7 @@ class PaymentGatewayFunctionalTest {
   void shouldDeclinePaymentWithEvenCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424242", "GBP", 2500);
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", UUID.randomUUID().toString(),request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -56,7 +56,7 @@ class PaymentGatewayFunctionalTest {
   void shouldRejectPaymentWithInvalidCardNumber() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424abc", "USD", 100);
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", UUID.randomUUID().toString(),request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -71,7 +71,7 @@ class PaymentGatewayFunctionalTest {
     request.setExpiryMonth(13);
     request.setExpiryYear(YearMonth.now().getYear());
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", UUID.randomUUID().toString(),request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -84,13 +84,13 @@ class PaymentGatewayFunctionalTest {
   void shouldRejectPaymentWithInvalidCurrency() {
     PostPaymentRequest request = buildPaymentRequest("4242424242424242", "840", 1500);
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123",UUID.randomUUID().toString(), request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().getStatus()).isEqualTo(PaymentStatus.REJECTED);
     assertThat(response.getBody().getId()).isNull();
-    assertThat(response.getBody().getMessage()).contains("Currency must only contain letters");
+    assertThat(response.getBody().getMessage()).contains("Invalid ISO 4217 currency code");
   }
 
   @Test
@@ -103,7 +103,7 @@ class PaymentGatewayFunctionalTest {
     request.setAmount(-10);
     request.setCvv("12");
 
-    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", request);
+    ResponseEntity<PostPaymentResponse> response = postPayment("merchant-123", UUID.randomUUID().toString(), request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -119,11 +119,26 @@ class PaymentGatewayFunctionalTest {
     String dedupeKey = "dedupe-key-123";
 
     ResponseEntity<PostPaymentResponse> response1 = postPayment(merchantId, dedupeKey, request);
-    ResponseEntity<PostPaymentResponse> response2 = postPayment(merchantId, dedupeKey, request);
+    ResponseEntity<PostPaymentResponse> response2 = getPaymentByIdempotencyKey(merchantId, dedupeKey);
 
     assertThat(response1.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response2.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response1.getBody().getId()).isEqualTo(response2.getBody().getId());
+  }
+
+  @Test
+  void shouldRetrievePaymentBySystemId() {
+    PostPaymentRequest request = buildPaymentRequest("4242424242424241", "USD", 100);
+    String merchantId = "merchant-id-test";
+    String dedupeKey = UUID.randomUUID().toString();
+
+    ResponseEntity<PostPaymentResponse> created = postPayment(merchantId, dedupeKey, request);
+    UUID paymentId = created.getBody().getId();
+
+    ResponseEntity<PostPaymentResponse> retrieved = getPaymentById(merchantId, paymentId);
+
+    assertThat(retrieved.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(retrieved.getBody().getId()).isEqualTo(paymentId);
   }
 
   @Test
@@ -139,9 +154,6 @@ class PaymentGatewayFunctionalTest {
     assertThat(response1.getBody().getId()).isNotEqualTo(response2.getBody().getId());
   }
 
-  private ResponseEntity<PostPaymentResponse> postPayment(String merchantId, PostPaymentRequest request) {
-    return postPayment(merchantId, null, request);
-  }
 
   private ResponseEntity<PostPaymentResponse> postPayment(String merchantId, String dedupeKey, PostPaymentRequest request) {
     HttpHeaders headers = new HttpHeaders();
@@ -151,7 +163,21 @@ class PaymentGatewayFunctionalTest {
       headers.set("Idempotency-Key", dedupeKey);
     }
     HttpEntity<PostPaymentRequest> entity = new HttpEntity<>(request, headers);
-    return restTemplate.postForEntity("/api/payment", entity, PostPaymentResponse.class);
+    return restTemplate.postForEntity("/api/v1/payments", entity, PostPaymentResponse.class);
+  }
+
+  private ResponseEntity<PostPaymentResponse> getPaymentByIdempotencyKey(String merchantId, String dedupeKey) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("Merchant-Id", merchantId);
+    HttpEntity<Void> entity = new HttpEntity<>(headers);
+    return restTemplate.exchange("/api/v1/payments/idempotency/" + dedupeKey, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
+  }
+
+  private ResponseEntity<PostPaymentResponse> getPaymentById(String merchantId, UUID id) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("Merchant-Id", merchantId);
+    HttpEntity<Void> entity = new HttpEntity<>(headers);
+    return restTemplate.exchange("/api/v1/payments/" + id, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
   }
 
   private PostPaymentRequest buildPaymentRequest(String cardNumber, String currency, int amount) {

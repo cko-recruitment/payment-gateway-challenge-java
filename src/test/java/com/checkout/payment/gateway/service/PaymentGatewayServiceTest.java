@@ -73,6 +73,22 @@ class PaymentGatewayServiceTest {
   }
 
   @Test
+  void shouldReturnPaymentByIdWhenFound() {
+    String merchantId = "merchant-123";
+    UUID id = UUID.randomUUID();
+    PostPaymentResponse payment = new PostPaymentResponse();
+    payment.setId(id);
+    payment.setStatus(PaymentStatus.AUTHORIZED);
+
+    when(idempotencyRepository.getById(merchantId, id)).thenReturn(Optional.of(payment));
+
+    Optional<PostPaymentResponse> result = paymentGatewayService.getPaymentById(merchantId, id);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().getId()).isEqualTo(id);
+  }
+
+  @Test
   void shouldAuthorizePaymentWhenBankReturnsAuthorized() {
     PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
         "USD", 1050, "123");
@@ -147,7 +163,7 @@ class PaymentGatewayServiceTest {
 
     assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
         .isInstanceOf(PaymentValidationException.class)
-        .hasMessageContaining("Currency must only contain letters");
+        .hasMessageContaining("Invalid ISO 4217 currency code");
 
     verify(bankClient, never()).processPayment(any());
   }
