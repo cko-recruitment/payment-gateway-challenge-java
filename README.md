@@ -15,7 +15,8 @@ a straight retry chosen for simplicity, it would be not good for payments (dupli
 13. PaymentGatewayServiceTest use real PaymentsRepository. Pro: simpler and more real tests;
 Con: less extensible (a proper PaymentsRepository should probably be mocked later on)
 14. No tests for PaymentRepository (has no logic)
-15. 
+15. Single Payment Response for get and post: they look the same know,
+they might differ later, but I followed the YAGNI principle
 
 
 # Instructions for candidates

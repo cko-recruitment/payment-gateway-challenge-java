@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class PaymentGatewayServiceIntegrationTest {
 
     UUID id = service.processPayment(request);
 
-    PostPaymentResponse response = service.getPaymentById(id);
+    PaymentResponse response = service.getPaymentById(id);
 
     assertThat(response.getStatus())
         .isEqualTo(PaymentStatus.AUTHORIZED);
@@ -44,7 +44,7 @@ class PaymentGatewayServiceIntegrationTest {
 
     UUID id = service.processPayment(request);
 
-    PostPaymentResponse response = service.getPaymentById(id);
+    PaymentResponse response = service.getPaymentById(id);
 
     assertThat(response.getStatus())
         .isEqualTo(PaymentStatus.DECLINED);

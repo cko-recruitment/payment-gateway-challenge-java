@@ -1,8 +1,8 @@
 package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.model.internal.BankResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.util.UUID;
@@ -23,7 +23,7 @@ public class PaymentGatewayService {
     this.bankClient = bankClient;
   }
 
-  public PostPaymentResponse getPaymentById(UUID id) {
+  public PaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to to payment with ID {}", id);
     return paymentsRepository.get(id).orElseThrow(() -> new EventProcessingException("Invalid ID"));
   }
@@ -32,7 +32,7 @@ public class PaymentGatewayService {
     LOG.debug("Received payment request {}", paymentRequest);
     BankResponse bankResponse = bankClient.processPayment(paymentRequest);
 
-    var paymentResponse = PostPaymentResponse.of(paymentRequest, bankResponse);
+    var paymentResponse = PaymentResponse.of(paymentRequest, bankResponse);
     paymentsRepository.add(paymentResponse);
 
     return paymentResponse.getId();

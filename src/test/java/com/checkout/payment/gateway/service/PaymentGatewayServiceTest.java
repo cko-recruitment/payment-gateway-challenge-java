@@ -7,8 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.model.internal.BankResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.util.Optional;
@@ -39,11 +39,11 @@ class PaymentGatewayServiceTest {
     when(bankClient.processPayment(request))
         .thenReturn(bankResponse);
 
-    var expectedPaymentResponse = PostPaymentResponse.of(request, bankResponse);
+    var expectedPaymentResponse = PaymentResponse.of(request, bankResponse);
 
 
     UUID paymentId = service.processPayment(request);
-    Optional<PostPaymentResponse> actualResponse = repo.get(paymentId);
+    Optional<PaymentResponse> actualResponse = repo.get(paymentId);
 
 
     verify(bankClient).processPayment(request);
@@ -64,11 +64,11 @@ class PaymentGatewayServiceTest {
     when(bankClient.processPayment(request))
         .thenReturn(bankResponse);
 
-    var expectedPaymentResponse = PostPaymentResponse.of(request, bankResponse);
+    var expectedPaymentResponse = PaymentResponse.of(request, bankResponse);
 
 
     UUID paymentId = service.processPayment(request);
-    Optional<PostPaymentResponse> actualResponse = repo.get(paymentId);
+    Optional<PaymentResponse> actualResponse = repo.get(paymentId);
 
 
     verify(bankClient).processPayment(request);
@@ -83,12 +83,12 @@ class PaymentGatewayServiceTest {
   void whenPaymentExistsThenItIsReturned() {
     UUID id = UUID.randomUUID();
 
-    var payment = new PostPaymentResponse();
+    var payment = new PaymentResponse();
     payment.setId(id);
     repo.add(payment);
 
 
-    PostPaymentResponse actualResponse = service.getPaymentById(id);
+    PaymentResponse actualResponse = service.getPaymentById(id);
 
 
     assertThat(actualResponse.getId()).isEqualTo(id);

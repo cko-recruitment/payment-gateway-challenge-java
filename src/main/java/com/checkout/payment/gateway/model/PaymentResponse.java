@@ -1,16 +1,34 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.model.internal.BankResponse;
 import java.util.UUID;
 
-public class GetPaymentResponse {
+public class PaymentResponse {
   private UUID id;
   private PaymentStatus status;
-  private int cardNumberLastFour;
+  private String cardNumberLastFour;
   private int expiryMonth;
   private int expiryYear;
   private String currency;
   private int amount;
+
+  public static PaymentResponse of(PostPaymentRequest paymentRequest, BankResponse bankResponse) {
+    var postPaymentResponse = new PaymentResponse();
+
+    postPaymentResponse.setId(UUID.randomUUID());
+    postPaymentResponse.setStatus(
+        bankResponse.isAuthorized()? PaymentStatus.AUTHORIZED: PaymentStatus.DECLINED
+    );
+
+    postPaymentResponse.setCardNumberLastFour(paymentRequest.extractLastFour());
+    postPaymentResponse.setExpiryMonth(paymentRequest.getExpiryMonth());
+    postPaymentResponse.setExpiryYear(paymentRequest.getExpiryYear());
+    postPaymentResponse.setCurrency(paymentRequest.getCurrency());
+    postPaymentResponse.setAmount(paymentRequest.getAmount());
+
+    return postPaymentResponse;
+  }
 
   public UUID getId() {
     return id;
@@ -28,11 +46,11 @@ public class GetPaymentResponse {
     this.status = status;
   }
 
-  public int getCardNumberLastFour() {
+  public String getCardNumberLastFour() {
     return cardNumberLastFour;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
+  public void setCardNumberLastFour(String cardNumberLastFour) {
     this.cardNumberLastFour = cardNumberLastFour;
   }
 
