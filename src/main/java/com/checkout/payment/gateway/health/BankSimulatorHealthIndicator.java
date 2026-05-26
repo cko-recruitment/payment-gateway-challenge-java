@@ -1,10 +1,10 @@
 package com.checkout.payment.gateway.health;
 
+import java.net.Socket;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 @Component
 public class BankSimulatorHealthIndicator implements HealthIndicator {
@@ -12,15 +12,19 @@ public class BankSimulatorHealthIndicator implements HealthIndicator {
   @Value("${bank.url}")
   private String bankUrl;
 
-  private final RestTemplate restTemplate = new RestTemplate();
-
   @Override
   public Health health() {
     try {
-      restTemplate.getForEntity(bankUrl, String.class);
-      return Health.up().withDetail("bank", "available").build();
+      // Extract host and port from URL like http://host:port/path
+      String hostPort = bankUrl.replace("http://", "").replace("https://", "");
+      String host = hostPort.split(":")[0];
+      int port = Integer.parseInt(hostPort.split(":")[1].split("/")[0]);
+
+      try (Socket socket = new Socket(host, port)) {
+        return Health.up().withDetail("bank", host + ":" + port + " reachable").build();
+      }
     } catch (Exception ex) {
-      return Health.down().withDetail("bank", "unavailable: " + ex.getMessage()).build();
+      return Health.down().withDetail("bank", "unreachable: " + ex.getMessage()).build();
     }
   }
 }

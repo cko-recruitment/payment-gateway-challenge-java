@@ -1,0 +1,35 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.properties
+
+# Test reports
+build/reports/
+build/test-results/
+
+# Local env
+.env
+*.local
+
+# Docs (not needed for build)
+*.md
+imposters/
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
