@@ -44,6 +44,7 @@ jobs:
           min-coverage-changed-files: 70
           title: 'Coverage Report'
           update-comment: true
+          fail-on-coverage-less-than-min: true
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
