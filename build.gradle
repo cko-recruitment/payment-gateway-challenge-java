@@ -23,9 +23,9 @@ dependencies {
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
     // Rate Limit & Metrics — AOP support
     implementation 'org.springframework.boot:spring-boot-starter-aop'
-    // TODO: Metrics — add actuator + micrometer for Prometheus metrics
-    // implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // implementation 'io.micrometer:micrometer-registry-prometheus'
+    // Observability — Actuator health checks and Prometheus metrics
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
