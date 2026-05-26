@@ -70,18 +70,75 @@ jobs:
           ls -la build/reports/jacoco/jacocoFullReport/
           head -20 build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml
 
-      - name: Add Coverage to PR Comment
-        uses: madrapps/jacoco-report@v1.6.1
+      - name: Parse Coverage Report
         if: github.event_name == 'pull_request'
-        continue-on-error: true
+        id: coverage
+        run: |
+          python3 << 'EOF'
+          import xml.etree.ElementTree as ET
+          
+          tree = ET.parse('build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml')
+          root = tree.getroot()
+          
+          # Overall coverage
+          total_missed = 0
+          total_covered = 0
+          for counter in root.findall('.//report/counter'):
+              if counter.get('type') == 'INSTRUCTION':
+                  total_missed += int(counter.get('missed', 0))
+                  total_covered += int(counter.get('covered', 0))
+          
+          overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
+          
+          # Package level
+          packages = []
+          for pkg in root.findall('.//package'):
+              name = pkg.get('name', '').replace('/', '.')
+              missed = 0
+              covered = 0
+              for counter in pkg.findall('counter'):
+                  if counter.get('type') == 'INSTRUCTION':
+                      missed += int(counter.get('missed', 0))
+                      covered += int(counter.get('covered', 0))
+              if missed + covered > 0:
+                  pct = covered / (missed + covered) * 100
+                  packages.append((name, pct, missed + covered))
+          
+          packages.sort(key=lambda x: x[1])
+          
+          # Generate markdown
+          lines = []
+          lines.append(f"## 📊 Coverage Report: {overall:.1f}%")
+          lines.append("")
+          lines.append("| Package | Coverage | Lines |")
+          lines.append("|---------|----------|-------|")
+          
+          for name, pct, total in packages[:20]:  # Top 20
+              status = "🟢" if pct >= 70 else "🟡" if pct >= 50 else "🔴"
+              lines.append(f"| {name} | {status} {pct:.1f}% | {total} |")
+          
+          if len(packages) > 20:
+              lines.append(f"| ... ({len(packages) - 20} more) | | |")
+          
+          with open('coverage-comment.md', 'w') as f:
+              f.write('\n'.join(lines))
+          
+          print(f"overall={overall:.1f}")
+          EOF
+          echo "overall=$(cat coverage-comment.md | head -1 | grep -o '[0-9.]*%' | head -1)" >> $GITHUB_OUTPUT
+
+      - name: Post Coverage Comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          paths: build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 70
-          min-coverage-changed-files: 70
-          title: 'Coverage Report'
-          update-comment: true
-          fail-on-coverage-less-than-min: true
+          header: coverage
+          path: coverage-comment.md
+
+      - name: Fail if Coverage Low
+        if: github.event_name == 'pull_request' && steps.coverage.outputs.overall < 70
+        run: |
+          echo "Coverage ${{ steps.coverage.outputs.overall }} is below 70%"
+          exit 1
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
