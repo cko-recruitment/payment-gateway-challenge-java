@@ -53,56 +53,50 @@ public class PaymentGatewayService {
 
     try {
       BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
-      return buildSuccessResponse(paymentRequest, bankResponse, merchantId, dedupeKey);
+      PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
+
+      PostPaymentResponse response = new PostPaymentResponse();
+      response.setId(UUID.randomUUID());
+      response.setStatus(status);
+      response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
+      response.setExpiryMonth(paymentRequest.getExpiryMonth());
+      response.setExpiryYear(paymentRequest.getExpiryYear());
+      response.setCurrency(paymentRequest.getCurrency().toUpperCase());
+      response.setAmount(paymentRequest.getAmount());
+      response.setGatewayCode(status == PaymentStatus.AUTHORIZED ? GatewayCode.SUCCESS : GatewayCode.DECLINED);
+
+      if (dedupeKey != null && !dedupeKey.isBlank()) {
+        idempotencyRepository.save(merchantId, dedupeKey, response);
+      }
+
+      response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
+      response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
+
+      secureLogger.info("Payment processed: merchant={}, id={}, status={}", merchantId, response.getId(), status);
+      return response;
+
     } catch (HttpServerErrorException ex) {
-      secureLogger.error("Bank returned error for merchant={}: {}", merchantId, ex.getStatusCode());
-      return mapBankError(ex);
+      secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
+      return bankErrorResponse(ex);
     }
   }
 
-  private PostPaymentResponse buildSuccessResponse(PostPaymentRequest request, BankPaymentResponse bankResponse,
-      String merchantId, String dedupeKey) {
-    PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
-
+  private PostPaymentResponse bankErrorResponse(HttpServerErrorException ex) {
     PostPaymentResponse response = new PostPaymentResponse();
-    response.setId(UUID.randomUUID());
-    response.setStatus(status);
-    response.setCardNumberLastFour(Integer.parseInt(request.getLastFourDigits()));
-    response.setExpiryMonth(request.getExpiryMonth());
-    response.setExpiryYear(request.getExpiryYear());
-    response.setCurrency(request.getCurrency().toUpperCase());
-    response.setAmount(request.getAmount());
+    response.setStatus(PaymentStatus.DECLINED);
+    response.addLink(new Link("self", "/api/v1/payments", "POST"));
 
-    if (status == PaymentStatus.AUTHORIZED) {
-      response.setGatewayCode(GatewayCode.SUCCESS);
-    } else {
-      response.setGatewayCode(GatewayCode.DECLINED);
-    }
-
-    if (dedupeKey != null && !dedupeKey.isBlank()) {
-      idempotencyRepository.save(merchantId, dedupeKey, response);
-      secureLogger.info("Payment processed and dedupe saved: merchant={}, id={}, key={}", merchantId, response.getId(), dedupeKey);
-    } else {
-      secureLogger.info("Payment processed successfully: merchant={}, id={}, status={}", merchantId, response.getId(), response.getStatus());
-    }
-
-    response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
-    response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
-
-    return response;
-  }
-
-  private PostPaymentResponse mapBankError(HttpServerErrorException ex) {
     if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-      return PostPaymentResponse.declined("Bank service temporarily unavailable")
-          .withGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+      response.setDescription("Bank service temporarily unavailable");
+      response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+    } else if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
+      response.setDescription("Bank validation error");
+      response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
+    } else {
+      response.setDescription("Bank error: " + ex.getStatusCode());
+      response.setGatewayCode(GatewayCode.BANK_ERROR);
     }
-    if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
-      return PostPaymentResponse.declined("Bank validation error")
-          .withGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
-    }
-    return PostPaymentResponse.declined("Bank error: " + ex.getStatusCode())
-        .withGatewayCode(GatewayCode.BANK_ERROR);
+    return response;
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {
