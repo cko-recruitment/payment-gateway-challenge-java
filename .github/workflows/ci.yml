@@ -50,6 +50,17 @@ jobs:
       - name: Functional Tests
         run: ./gradlew functionalTest
 
+      - name: Test Summary
+        if: github.event_name == 'pull_request'
+        uses: test-summary/action@v2
+        with:
+          paths: |
+            build/test-results/test/*.xml
+            build/test-results/integrationTest/*.xml
+            build/test-results/functionalTest/*.xml
+          show: "fail, skip"
+        continue-on-error: true
+
       - name: Generate Coverage Report
         run: ./gradlew jacocoFullReport
 
