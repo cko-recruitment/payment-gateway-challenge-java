@@ -4,5 +4,6 @@ providers:
   - name: 'default'
     folder: ''
     type: file
+    allowUiUpdates: true
     options:
       path: /etc/grafana/provisioning/dashboards
