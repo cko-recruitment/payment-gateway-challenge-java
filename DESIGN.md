@@ -16,11 +16,11 @@ Controller (HTTP) → Service (Business Logic) → Repository (Storage)
                                            BankClient (External API)
 ```
 
-**Key Responsibilities:**
-- **`PaymentGatewayController`**: Thin layer for request routing and resource orchestration. It maintains the "200-Only" API contract.
-- **`PaymentGatewayService`**: The core engine for validation (ISO 4217 compliant), bank interaction, and persistence orchestration.
-- **`CommonExceptionHandler`**: Global fallback that catches unexpected system errors and translates them into standardized, structured 200-OK responses.
-- **`IdempotencyRepository`**: Dual-indexed in-memory storage (System ID and Idempotency Key) with merchant isolation.
+**Key Responsibilities (following SOLID principles):**
+- **`PaymentGatewayController`**: Thin layer for request routing and resource orchestration. It maintains the "200-Only" API contract. *(Single Responsibility Principle)*
+- **`PaymentGatewayService`**: The core engine for validation, bank interaction, and persistence orchestration. Depends on abstractions (`BankClient`, `IdempotencyRepository`) rather than concrete implementations. *(Dependency Inversion Principle)*
+- **`IdempotencyRepository`**: Interface defining the contract for dual-indexed storage (System ID and Idempotency Key) with merchant isolation. `InMemoryIdempotencyRepository` provides the concrete in-memory implementation. *(Interface Segregation & Liskov Substitution Principles)*
+- **`BankClient`**: Interface abstracting external bank communication, allowing the service to remain agnostic of the actual bank integration. `BankSimulatorClient` implements this for the simulator. *(Open/Closed Principle)*
 
 ---
 
@@ -42,7 +42,7 @@ All API responses inherit from `BasePaymentResponse`, providing machine-readable
 | :--- | :--- | :--- |
 | `code` | Unique, machine-readable outcome code. | `PAYMENT_DECLINED` |
 | `message` | Human-readable description of the result. | "Insufficient funds" |
-| `retryable` | Boolean indicating if a retry is safe/recommended. | `true` |
+| `retryable` | Boolean indicating if a retry is safe/recommended. | `false` |
 
 **Standardized Gateway Codes:**
 - `SUCCESS`: Operation completed as requested.
