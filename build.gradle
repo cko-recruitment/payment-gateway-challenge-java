@@ -107,6 +107,19 @@ jacocoTestReport {
         fileTree(project.buildDir).include("**/jacoco/*.exec")
     )
     sourceSets sourceSets.main
+    
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                'com/checkout/payment/gateway/controller/PaymentGatewayApi.class',
+                'com/checkout/payment/gateway/model/**',
+                'com/checkout/payment/gateway/enums/**',
+                'com/checkout/payment/gateway/exception/**',
+                'com/checkout/payment/gateway/security/SecureLogger.class',
+                'com/checkout/payment/gateway/PaymentGatewayApplication.class'
+            ])
+        }))
+    }
 }
 
 jacocoTestCoverageVerification {
