@@ -111,12 +111,22 @@ jacocoTestReport {
     afterEvaluate {
         classDirectories.setFrom(files(classDirectories.files.collect {
             fileTree(dir: it, exclude: [
+                // Swagger / API docs
                 'com/checkout/payment/gateway/controller/PaymentGatewayApi.class',
+                // Model / POJO
                 'com/checkout/payment/gateway/model/**',
+                // Enums / Constants
                 'com/checkout/payment/gateway/enums/**',
+                // Exceptions
                 'com/checkout/payment/gateway/exception/**',
-                'com/checkout/payment/gateway/security/SecureLogger.class',
-                'com/checkout/payment/gateway/PaymentGatewayApplication.class'
+                // Framework / Config
+                'com/checkout/payment/gateway/configuration/**',
+                'com/checkout/payment/gateway/PaymentGatewayApplication.class',
+                // Dead code / TODO interfaces
+                'com/checkout/payment/gateway/aspect/Metrics.class',
+                'com/checkout/payment/gateway/aspect/RateLimiter.class',
+                // Security wrapper
+                'com/checkout/payment/gateway/security/SecureLogger.class'
             ])
         }))
     }
