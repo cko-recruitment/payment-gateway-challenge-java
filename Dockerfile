@@ -16,12 +16,12 @@ COPY src/ src/
 RUN --mount=type=cache,target=/home/gradle/.gradle \
     ./gradlew bootJar --no-daemon
 
-# Runtime image - minimal
-FROM eclipse-temurin:17-jre-alpine
+# Runtime image
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
 # Create non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
 COPY --from=builder /app/build/libs/*.jar app.jar
 RUN chown appuser:appgroup app.jar
