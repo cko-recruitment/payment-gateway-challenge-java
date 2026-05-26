@@ -103,6 +103,11 @@ public class PostPaymentResponse extends BasePaymentResponse {
     return response;
   }
 
+  public PostPaymentResponse withGatewayCode(GatewayCode code) {
+    this.setGatewayCode(code);
+    return this;
+  }
+
   @Override
   public String toString() {
     return "PostPaymentResponse{" +

@@ -15,7 +15,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpServerErrorException;
 
 @Service
 public class PaymentGatewayService {
@@ -49,17 +51,27 @@ public class PaymentGatewayService {
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
-    BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
+    try {
+      BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
+      return buildSuccessResponse(paymentRequest, bankResponse, merchantId, dedupeKey);
+    } catch (HttpServerErrorException ex) {
+      secureLogger.error("Bank returned error for merchant={}: {}", merchantId, ex.getStatusCode());
+      return mapBankError(ex);
+    }
+  }
+
+  private PostPaymentResponse buildSuccessResponse(PostPaymentRequest request, BankPaymentResponse bankResponse,
+      String merchantId, String dedupeKey) {
     PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
 
     PostPaymentResponse response = new PostPaymentResponse();
     response.setId(UUID.randomUUID());
     response.setStatus(status);
-    response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
-    response.setExpiryMonth(paymentRequest.getExpiryMonth());
-    response.setExpiryYear(paymentRequest.getExpiryYear());
-    response.setCurrency(paymentRequest.getCurrency().toUpperCase());
-    response.setAmount(paymentRequest.getAmount());
+    response.setCardNumberLastFour(Integer.parseInt(request.getLastFourDigits()));
+    response.setExpiryMonth(request.getExpiryMonth());
+    response.setExpiryYear(request.getExpiryYear());
+    response.setCurrency(request.getCurrency().toUpperCase());
+    response.setAmount(request.getAmount());
 
     if (status == PaymentStatus.AUTHORIZED) {
       response.setGatewayCode(GatewayCode.SUCCESS);
@@ -74,11 +86,23 @@ public class PaymentGatewayService {
       secureLogger.info("Payment processed successfully: merchant={}, id={}, status={}", merchantId, response.getId(), response.getStatus());
     }
 
-    // HATEOAS: add links for next actions
     response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
     response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
 
     return response;
+  }
+
+  private PostPaymentResponse mapBankError(HttpServerErrorException ex) {
+    if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+      return PostPaymentResponse.declined("Bank service temporarily unavailable")
+          .withGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+    }
+    if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
+      return PostPaymentResponse.declined("Bank validation error")
+          .withGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
+    }
+    return PostPaymentResponse.declined("Bank error: " + ex.getStatusCode())
+        .withGatewayCode(GatewayCode.BANK_ERROR);
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {

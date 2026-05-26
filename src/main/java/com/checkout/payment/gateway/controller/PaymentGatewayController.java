@@ -1,7 +1,5 @@
 package com.checkout.payment.gateway.controller;
 
-import com.checkout.payment.gateway.enums.GatewayCode;
-import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.GetPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
@@ -20,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.HttpServerErrorException;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -83,27 +80,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     } catch (PaymentValidationException ex) {
       secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
       return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
-    } catch (HttpServerErrorException ex) {
-      PostPaymentResponse response = PostPaymentResponse.declined("");
-      if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-        secureLogger.error("Bank returned 503 Service Unavailable for merchant={}", merchantId, ex);
-        response.setDescription("Bank service temporarily unavailable");
-        response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
-      } else if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
-        secureLogger.error("Bank returned 400 Bad Request for merchant={}", merchantId, ex);
-        response.setDescription("Bank validation error");
-        response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
-      } else {
-        secureLogger.error("Bank returned error for merchant={}: {}", merchantId, ex.getStatusCode());
-        response.setDescription("Bank error: " + ex.getStatusCode());
-        response.setGatewayCode(GatewayCode.BANK_ERROR);
-      }
-      return new ResponseEntity<>(response, HttpStatus.OK);
-    } catch (BankProcessingException ex) {
-      secureLogger.error("Bank processing failed for merchant={}", merchantId, ex);
-      PostPaymentResponse response = PostPaymentResponse.declined("Bank processing failed: " + ex.getMessage());
-      response.setGatewayCode(GatewayCode.BANK_ERROR);
-      return new ResponseEntity<>(response, HttpStatus.OK);
     }
   }
 }
