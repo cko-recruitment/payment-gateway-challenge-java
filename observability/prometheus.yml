@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'payment-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment-gateway:8090']
