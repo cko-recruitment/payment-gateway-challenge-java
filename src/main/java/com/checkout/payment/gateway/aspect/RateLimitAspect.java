@@ -1,6 +1,7 @@
 package com.checkout.payment.gateway.aspect;
 
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,8 +32,13 @@ public class RateLimitAspect {
   private static final int MAX_PER_MINUTE = 600;
   private static final long WINDOW_MINUTES = 60;
 
+  private final MeterRegistry registry;
   private final Map<String, Window> secondWindows = new ConcurrentHashMap<>();
   private final Map<String, Window> minuteWindows = new ConcurrentHashMap<>();
+
+  public RateLimitAspect(MeterRegistry registry) {
+    this.registry = registry;
+  }
 
   @Around("execution(* com.checkout.payment.gateway.controller.PaymentGatewayController.*(..))")
   public Object aroundController(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -72,6 +78,7 @@ public class RateLimitAspect {
     PostPaymentResponse rejected = new PostPaymentResponse();
     rejected.setStatus(com.checkout.payment.gateway.enums.PaymentStatus.REJECTED);
     rejected.setDescription(message);
+    registry.counter("rate_limit.rejected", "type", message.contains("per second") ? "per_second" : "per_minute").increment();
     return new ResponseEntity<>(rejected, HttpStatus.OK);
   }
 
