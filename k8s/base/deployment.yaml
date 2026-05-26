@@ -20,8 +20,8 @@ spec:
           ports:
             - containerPort: 8090
           env:
-            - name: BANK_URL
-              value: "http://bank-simulator:8080/payments"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
           resources:
             requests:
               memory: "256Mi"
