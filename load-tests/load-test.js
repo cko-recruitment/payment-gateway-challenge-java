@@ -1,16 +1,17 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Rate, Trend } from 'k6/metrics';
+import { Rate, Trend, Counter } from 'k6/metrics';
 
 // Custom metrics
 const errorRate = new Rate('errors');
 const paymentLatency = new Trend('payment_latency');
+const rateLimitHits = new Counter('rate_limit_hits');
 
 export const options = {
   stages: [
     { duration: '30s', target: 10 },   // Ramp up
     { duration: '1m', target: 50 },    // Steady load
-    { duration: '30s', target: 100 },  // Peak load
+    { duration: '30s', target: 100 },  // Peak load (will trigger rate limit)
     { duration: '30s', target: 0 },    // Ramp down
   ],
   thresholds: {
@@ -45,11 +46,21 @@ export default function () {
   const latency = Date.now() - start;
   paymentLatency.add(latency);
 
+  // Check for rate limiting
+  const isRateLimited = res.status === 200 && res.json('status') === 'Rejected' && 
+                        res.json('description') && res.json('description').includes('Rate limit');
+  
+  if (isRateLimited) {
+    rateLimitHits.add(1);
+    // Backoff when rate limited
+    sleep(1);
+  }
+
   const success = check(res, {
     'status is 200': (r) => r.status === 200,
     'response has code': (r) => r.json('code') !== undefined,
   });
 
-  errorRate.add(!success);
-  sleep(1);
+  errorRate.add(!success && !isRateLimited);
+  sleep(Math.random() * 0.5); // Random think time 0-500ms
 }

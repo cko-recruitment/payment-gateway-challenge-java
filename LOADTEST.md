@@ -60,10 +60,10 @@ docker-compose -f docker-compose.loadtest.yml up
 
 ## Test Scenarios
 
-| File | VUs | Duration | Purpose |
-|------|-----|----------|---------|
-| `smoke-test.js` | 1 | 10s | Sanity check |
-| `load-test.js` | 10→50→100 | 2.5m | Performance baseline |
+| File | VUs | Duration | Purpose | Rate Limit |
+|------|-----|----------|---------|------------|
+| `smoke-test.js` | 1 | 10s | Sanity check | No |
+| `load-test.js` | 10→50→100 | 2.5m | Performance baseline | **Yes** (detects & backs off) |
 
 ## k6 Script Reference
 
@@ -155,21 +155,32 @@ export const options = {
 - `http_req_duration` — Request latency
 - `http_reqs` — Requests per second
 - `errors` — Error rate
+- `rate_limit_hits` — Rate limit triggered count
 
 ### Prometheus/Grafana
 - `payment_latency_seconds` — Business-level latency
 - `bank_latency_seconds` — Bank API latency
 - `payment_total` — Throughput by status
+- `rate_limit_hits` — Rate limiting pressure
 
 ## Grafana Dashboard
 
 Access http://localhost:3000 during load test (admin/admin).
 
 Watch for:
-- QPS trends
+- QPS trends (plateau = rate limit hit)
 - Latency percentiles
 - Error spikes
+- **Rate limit hits** (`rate_limit_hits` metric)
 - JVM memory/CPU usage
+
+### Rate Limit Behavior
+
+At 100 VUs, expect:
+- ~10% requests rate limited (10 req/s per merchant limit)
+- k6 detects `Rejected` + `Rate limit` description
+- Automatic 1s backoff applied
+- QPS plateaus at ~10 req/s per merchant
 
 ## Cleanup
 
