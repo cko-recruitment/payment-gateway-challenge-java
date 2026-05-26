@@ -28,3 +28,8 @@ services:
 volumes:
   prometheus-data:
   grafana-data:
+
+networks:
+  default:
+    name: payment-gateway-network
+    external: true
