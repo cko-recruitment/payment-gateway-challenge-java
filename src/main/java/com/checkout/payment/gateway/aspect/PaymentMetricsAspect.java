@@ -18,11 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class PaymentMetricsAspect {
 
-  private MeterRegistry registry;
-
-  public PaymentMetricsAspect() {
-    // No-op for tests without Micrometer
-  }
+  private final MeterRegistry registry;
 
   public PaymentMetricsAspect(MeterRegistry registry) {
     this.registry = registry;
