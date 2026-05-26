@@ -258,8 +258,9 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(payment_total{status=\"REJECTED\"}[1m])) / sum(rate(payment_total[1m]))",
-          "refId": "A"
+          "expr": "sum(rate(payment_total{status!=\"AUTHORIZED\"}[1m])) / sum(rate(payment_total[1m]))",
+          "refId": "A",
+          "legendFormat": "Error Rate"
         }
       ],
       "title": "Error Rate",
