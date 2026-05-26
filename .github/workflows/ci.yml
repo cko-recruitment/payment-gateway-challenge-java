@@ -34,9 +34,16 @@ jobs:
       - name: Generate Coverage Report
         run: ./gradlew jacocoTestReport
 
+      - name: Debug Coverage Report Exists
+        if: github.event_name == 'pull_request'
+        run: |
+          ls -la build/reports/jacoco/test/
+          head -20 build/reports/jacoco/test/jacocoTestReport.xml
+
       - name: Add Coverage to PR Comment
         uses: madrapps/jacoco-report@v1.6.1
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         with:
           paths: build/reports/jacoco/test/jacocoTestReport.xml
           token: ${{ secrets.GITHUB_TOKEN }}
