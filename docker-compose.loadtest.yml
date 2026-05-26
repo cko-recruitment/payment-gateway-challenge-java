@@ -7,9 +7,8 @@ services:
     command: run /tests/load-test.js
     environment:
       - BASE_URL=http://payment-gateway:8090
-    networks:
-      - payment-gateway-challenge-java_payment-gateway-network
 
 networks:
-  payment-gateway-challenge-java_payment-gateway-network:
+  default:
+    name: payment-gateway-network
     external: true
