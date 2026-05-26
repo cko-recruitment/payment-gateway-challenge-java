@@ -1,5 +1,8 @@
 package com.checkout.payment.gateway.controller;
 
+import com.checkout.payment.gateway.enums.GatewayCode;
+import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.GetPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
@@ -76,10 +79,35 @@ public class PaymentGatewayController implements PaymentGatewayApi {
 
     try {
       PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
+
+      response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
+      response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
+
       return new ResponseEntity<>(response, HttpStatus.OK);
     } catch (PaymentValidationException ex) {
       secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
       return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
+    } catch (BankProcessingException ex) {
+      secureLogger.error("Bank processing failed for merchant={}", merchantId, ex);
+      return new ResponseEntity<>(bankErrorResponse(ex), HttpStatus.OK);
     }
+  }
+
+  private PostPaymentResponse bankErrorResponse(BankProcessingException ex) {
+    PostPaymentResponse response = new PostPaymentResponse();
+    response.setStatus(PaymentStatus.DECLINED);
+    response.addLink(new Link("self", "/api/v1/payments", "POST"));
+
+    if (ex.getBankStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+      response.setDescription("Bank service temporarily unavailable");
+      response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+    } else if (ex.getBankStatusCode() == HttpStatus.BAD_REQUEST) {
+      response.setDescription("Bank validation error");
+      response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
+    } else {
+      response.setDescription(ex.getMessage());
+      response.setGatewayCode(GatewayCode.BANK_ERROR);
+    }
+    return response;
   }
 }

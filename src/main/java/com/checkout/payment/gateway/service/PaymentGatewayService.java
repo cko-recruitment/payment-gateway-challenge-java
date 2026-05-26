@@ -3,6 +3,7 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
@@ -68,35 +69,13 @@ public class PaymentGatewayService {
       if (dedupeKey != null && !dedupeKey.isBlank()) {
         idempotencyRepository.save(merchantId, dedupeKey, response);
       }
-
-      response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
-      response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
-
       secureLogger.info("Payment processed: merchant={}, id={}, status={}", merchantId, response.getId(), status);
       return response;
 
     } catch (HttpServerErrorException ex) {
       secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
-      return bankErrorResponse(ex);
+      throw new BankProcessingException("Bank error: " + ex.getStatusCode(), ex);
     }
-  }
-
-  private PostPaymentResponse bankErrorResponse(HttpServerErrorException ex) {
-    PostPaymentResponse response = new PostPaymentResponse();
-    response.setStatus(PaymentStatus.DECLINED);
-    response.addLink(new Link("self", "/api/v1/payments", "POST"));
-
-    if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-      response.setDescription("Bank service temporarily unavailable");
-      response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
-    } else if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
-      response.setDescription("Bank validation error");
-      response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
-    } else {
-      response.setDescription("Bank error: " + ex.getStatusCode());
-      response.setGatewayCode(GatewayCode.BANK_ERROR);
-    }
-    return response;
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {
