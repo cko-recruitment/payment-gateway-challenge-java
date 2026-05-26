@@ -3,6 +3,7 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
@@ -15,7 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpServerErrorException;
 
 @Service
 public class PaymentGatewayService {
@@ -49,36 +52,30 @@ public class PaymentGatewayService {
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
-    BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
-    PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
+    try {
+      BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
+      PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
 
-    PostPaymentResponse response = new PostPaymentResponse();
-    response.setId(UUID.randomUUID());
-    response.setStatus(status);
-    response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
-    response.setExpiryMonth(paymentRequest.getExpiryMonth());
-    response.setExpiryYear(paymentRequest.getExpiryYear());
-    response.setCurrency(paymentRequest.getCurrency().toUpperCase());
-    response.setAmount(paymentRequest.getAmount());
+      PostPaymentResponse response = new PostPaymentResponse();
+      response.setId(UUID.randomUUID());
+      response.setStatus(status);
+      response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
+      response.setExpiryMonth(paymentRequest.getExpiryMonth());
+      response.setExpiryYear(paymentRequest.getExpiryYear());
+      response.setCurrency(paymentRequest.getCurrency().toUpperCase());
+      response.setAmount(paymentRequest.getAmount());
+      response.setGatewayCode(status == PaymentStatus.AUTHORIZED ? GatewayCode.SUCCESS : GatewayCode.DECLINED);
 
-    if (status == PaymentStatus.AUTHORIZED) {
-      response.setGatewayCode(GatewayCode.SUCCESS);
-    } else {
-      response.setGatewayCode(GatewayCode.DECLINED);
+      if (dedupeKey != null && !dedupeKey.isBlank()) {
+        idempotencyRepository.save(merchantId, dedupeKey, response);
+      }
+      secureLogger.info("Payment processed: merchant={}, id={}, status={}", merchantId, response.getId(), status);
+      return response;
+
+    } catch (HttpServerErrorException ex) {
+      secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
+      throw new BankProcessingException("Bank error: " + ex.getStatusCode(), ex);
     }
-
-    if (dedupeKey != null && !dedupeKey.isBlank()) {
-      idempotencyRepository.save(merchantId, dedupeKey, response);
-      secureLogger.info("Payment processed and dedupe saved: merchant={}, id={}, key={}", merchantId, response.getId(), dedupeKey);
-    } else {
-      secureLogger.info("Payment processed successfully: merchant={}, id={}, status={}", merchantId, response.getId(), response.getStatus());
-    }
-
-    // HATEOAS: add links for next actions
-    response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
-    response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
-
-    return response;
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {
