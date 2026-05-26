@@ -8,29 +8,24 @@ import static org.mockito.Mockito.when;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentMetricsAspectTest {
 
   private PaymentMetricsAspect aspect;
-
-  @Captor
-  private ArgumentCaptor<String> messageCaptor;
-
-  @Captor
-  private ArgumentCaptor<Object> argCaptor;
+  private SimpleMeterRegistry registry;
 
   @BeforeEach
   void setUp() {
-    aspect = new PaymentMetricsAspect();
+    registry = new SimpleMeterRegistry();
+    aspect = new PaymentMetricsAspect(registry);
   }
 
   @Test
@@ -44,6 +39,10 @@ class PaymentMetricsAspectTest {
 
     assertSame(response, result);
     verify(joinPoint).proceed();
+
+    // Verify Micrometer metrics
+    assertEquals(1, registry.counter("payment.total", "status", "AUTHORIZED").count());
+    assertEquals(1, registry.get("payment.latency").tag("status", "AUTHORIZED").timer().count());
   }
 
   @Test
@@ -67,6 +66,9 @@ class PaymentMetricsAspectTest {
 
     assertSame(expectedResult, result);
     verify(joinPoint).proceed();
+
+    // Verify bank latency metric
+    assertEquals(1, registry.get("bank.latency").timer().count());
   }
 
   @Test
@@ -82,6 +84,9 @@ class PaymentMetricsAspectTest {
 
     assertSame(entity, result);
     verify(joinPoint).proceed();
+
+    // Verify dedupe metric
+    assertEquals(1, registry.counter("payment.dedupe.hit").count());
   }
 
   @Test
