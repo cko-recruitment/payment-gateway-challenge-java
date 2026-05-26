@@ -13,6 +13,8 @@ services:
       - SPRING_PROFILES_ACTIVE=dev
     depends_on:
       - bank_simulator
+    networks:
+      - payment-gateway-network
 
   bank_simulator:
     container_name: bank_simulator
@@ -25,3 +27,9 @@ services:
       - type: bind
         source: ./imposters
         target: /imposters
+    networks:
+      - payment-gateway-network
+
+networks:
+  payment-gateway-network:
+    driver: bridge

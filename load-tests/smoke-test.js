@@ -9,14 +9,16 @@ export const options = {
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
 
 export default function () {
-  const res = http.post(`${BASE_URL}/api/v1/payments`, JSON.stringify({
+  const payload = JSON.stringify({
     card_number: '4111111111111111',
     expiry_month: 12,
     expiry_year: 2027,
     currency: 'USD',
     amount: 100,
     cvv: '123',
-  }), {
+  });
+
+  const res = http.post(`${BASE_URL}/api/v1/payments`, payload, {
     headers: {
       'Content-Type': 'application/json',
       'Merchant-Id': 'smoke-test',
