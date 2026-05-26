@@ -38,6 +38,7 @@ public class PaymentMetricsAspect {
       Timer.builder("payment.latency")
           .tag("status", status)
           .description("Payment processing latency")
+          .publishPercentileHistogram()
           .register(registry)
           .record(latencyMs, TimeUnit.MILLISECONDS);
 
@@ -58,6 +59,7 @@ public class PaymentMetricsAspect {
     if (registry != null) {
       Timer.builder("bank.latency")
           .description("Bank API call latency")
+          .publishPercentileHistogram()
           .register(registry)
           .record(latencyMs, TimeUnit.MILLISECONDS);
     }
