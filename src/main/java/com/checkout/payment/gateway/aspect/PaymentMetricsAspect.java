@@ -30,21 +30,32 @@ public class PaymentMetricsAspect {
   @Around("execution(* com.checkout.payment.gateway.service.PaymentGatewayService.processPayment(..))")
   public Object aroundProcessPayment(ProceedingJoinPoint joinPoint) throws Throwable {
     long start = System.nanoTime();
-    Object result = joinPoint.proceed();
-    long latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+    try {
+      Object result = joinPoint.proceed();
+      long latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
-    if (registry != null && result instanceof PostPaymentResponse response) {
-      String status = response.getStatus() != null ? response.getStatus().name() : "UNKNOWN";
-      Timer.builder("payment.latency")
-          .tag("status", status)
-          .description("Payment processing latency")
-          .publishPercentileHistogram()
-          .register(registry)
-          .record(latencyMs, TimeUnit.MILLISECONDS);
-
-      registry.counter("payment.total", "status", status).increment();
+      if (registry != null && result instanceof PostPaymentResponse response) {
+        String status = response.getStatus() != null ? response.getStatus().name() : "UNKNOWN";
+        recordPaymentMetrics(status, latencyMs);
+      }
+      return result;
+    } catch (com.checkout.payment.gateway.exception.PaymentValidationException ex) {
+      long latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+      recordPaymentMetrics("REJECTED", latencyMs);
+      throw ex;
     }
-    return result;
+  }
+
+  private void recordPaymentMetrics(String status, long latencyMs) {
+    if (registry == null) return;
+    Timer.builder("payment.latency")
+        .tag("status", status)
+        .description("Payment processing latency")
+        .publishPercentileHistogram()
+        .register(registry)
+        .record(latencyMs, TimeUnit.MILLISECONDS);
+
+    registry.counter("payment.total", "status", status).increment();
   }
 
   /**
