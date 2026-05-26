@@ -54,6 +54,9 @@ public class BankSimulatorClient implements BankClient {
       String message = "Bank returned status " + ex.getStatusCode();
       secureLogger.error(message, ex);
       throw ex;
+    } catch (BankProcessingException ex) {
+      // Re-throw directly — not a connection failure
+      throw ex;
     } catch (Exception ex) {
       secureLogger.error("Bank call failed", ex);
       throw new BankProcessingException("Cannot reach acquiring bank", ex);

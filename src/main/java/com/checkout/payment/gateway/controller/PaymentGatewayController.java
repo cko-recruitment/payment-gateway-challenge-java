@@ -59,6 +59,7 @@ public class PaymentGatewayController {
        @RequestBody PostPaymentRequest paymentRequest,
        @RequestHeader("Merchant-Id") String merchantId,
        @RequestHeader(name = "Idempotency-Key") String dedupeKey) {
+        
     secureLogger.info("Processing payment for merchant={}, request={}, dedupeKey={}", merchantId, paymentRequest, dedupeKey);
 
     Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, dedupeKey);
@@ -68,8 +69,12 @@ public class PaymentGatewayController {
     }
 
     try {
+
+      
       PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
       return new ResponseEntity<>(response, HttpStatus.OK);
+
+
     } catch (PaymentValidationException ex) {
       secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
       return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
@@ -79,6 +84,10 @@ public class PaymentGatewayController {
         secureLogger.error("Bank returned 503 Service Unavailable for merchant={}", merchantId, ex);
         response.setMessage("Bank service temporarily unavailable");
         response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+      } else if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) {
+        secureLogger.error("Bank returned 400 Bad Request for merchant={}", merchantId, ex);
+        response.setMessage("Bank validation error");
+        response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
       } else {
         secureLogger.error("Bank returned error for merchant={}: {}", merchantId, ex.getStatusCode());
         response.setMessage("Bank error: " + ex.getStatusCode());

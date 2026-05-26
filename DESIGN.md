@@ -12,8 +12,8 @@ The application follows a layered architecture to ensure separation of concerns 
 
 ```
 Controller (HTTP) → Service (Business Logic) → Repository (Storage)
-                                          ↘
-                                           BankClient (External API)
+       ↓                    ↓                        ↘
+  RateLimitAspect    PaymentMetricsAspect         BankClient (External API)
 ```
 
 **Key Responsibilities (following SOLID principles):**
@@ -78,14 +78,24 @@ Currency validation is not merely format-based. The system utilizes `java.util.C
 
 ---
 
-## 5. Storage and Performance
+## 5. Non-Functional Concerns (AOP)
+
+### Decision: Cross-Cutting Concerns via Spring AOP
+Rate limiting and metrics are implemented as aspects to avoid polluting business logic:
+
+- **`RateLimitAspect`**: Multi-granularity fixed window (1-second + 60-second) per merchant. Uses `ConcurrentHashMap` with `AtomicInteger` — **O(merchants)** memory.
+- **`PaymentMetricsAspect`**: Records payment latency and outcomes via SLF4J. Swappable for Micrometer/Prometheus later.
+
+**Why AOP:** Follows SRP/OCP. Business code does not know about rate limiting or metrics.
+
+## 6. Storage and Performance
 
 ### Decision: Dual-Indexed In-Memory Repository
 The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID and Idempotency Key). This provides **O(1)** retrieval performance for all `GET` operations while keeping the architecture simple for the current scope.
 
 ---
 
-## 6. Assumptions and Limitations
+## 7. Assumptions and Limitations
 
 1.  **Volatility**: Data is lost on application restart (In-memory storage).
 2.  **Context Trust**: `Merchant-Id` is trusted from the header without cryptographic verification (Exercise scope).
@@ -93,7 +103,7 @@ The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID 
 
 ---
 
-## 7. Design Trade-offs Summary
+## 8. Design Trade-offs Summary
 
 | Trade-off | Choice | Rationale |
 | :--- | :--- | :--- |
@@ -101,3 +111,5 @@ The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID 
 | **Response Model** | Inheritance | `GetPaymentResponse` extends `PostPaymentResponse` for semantic clarity without code duplication. |
 | **Versioning** | Path (/v1) | Safe evolution and backward compatibility. |
 | **Logging** | Masking | PII protection implemented via `toString()` overrides in models. |
+| **Rate Limiting** | Multi-granularity Fixed Window | 1s (10 req) + 60s (600 req). Protects downstream while allowing bursts. |
+| **Metrics** | AOP + SLF4J | Non-invasive. Upgrade to Micrometer without touching business code. |
