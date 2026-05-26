@@ -1,0 +1,21 @@
+services:
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./load-tests:/tests
+    command: run /tests/load-test.js
+    depends_on:
+      - payment-gateway
+    environment:
+      - BASE_URL=http://payment-gateway:8090
+
+  payment-gateway:
+    extends:
+      file: docker-compose.yml
+      service: payment-gateway
+
+  bank_simulator:
+    extends:
+      file: docker-compose.yml
+      service: bank_simulator
