@@ -1,9 +1,12 @@
-version: "3.8"
-
 services:
   payment-gateway:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - payment-gateway:latest
     container_name: payment-gateway
+    image: payment-gateway:latest
     ports:
       - "8090:8090"
     environment:

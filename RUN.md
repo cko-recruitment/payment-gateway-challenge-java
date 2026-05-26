@@ -18,7 +18,13 @@ One-command local hosting for the Payment Gateway and Bank Simulator.
 git clone <repo-url>
 cd payment-gateway-challenge-java
 
-# Start everything
+# First build (slow - downloads dependencies)
+docker-compose build
+
+# Subsequent starts (fast - uses cache)
+docker-compose up
+
+# Or one-liner if code changed
 docker-compose up --build
 ```
 
