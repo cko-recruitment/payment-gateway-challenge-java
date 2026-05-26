@@ -42,7 +42,7 @@ All API responses inherit from `BasePaymentResponse`, providing machine-readable
 | :--- | :--- | :--- |
 | `code` | Unique, machine-readable outcome code. | `PAYMENT_DECLINED` |
 | `message` | Human-readable description of the result. | "Insufficient funds" |
-| `retryable` | Boolean indicating if a retry is safe/recommended. | `false` |
+| `action` | Recommended client action. | `none` |
 
 **Standardized Gateway Codes:**
 - `SUCCESS`: Operation completed as requested.

@@ -62,7 +62,7 @@ class PaymentGatewayFunctionalTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().getStatus()).isEqualTo(PaymentStatus.REJECTED);
     assertThat(response.getBody().getId()).isNull();
-    assertThat(response.getBody().getMessage()).contains("Card number must only contain numeric characters");
+    assertThat(response.getBody().getDescription()).contains("Card number must only contain numeric characters");
   }
 
   @Test
@@ -77,7 +77,7 @@ class PaymentGatewayFunctionalTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().getStatus()).isEqualTo(PaymentStatus.REJECTED);
     assertThat(response.getBody().getId()).isNull();
-    assertThat(response.getBody().getMessage()).isNotBlank();
+    assertThat(response.getBody().getDescription()).isNotBlank();
   }
 
   @Test
@@ -90,7 +90,7 @@ class PaymentGatewayFunctionalTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().getStatus()).isEqualTo(PaymentStatus.REJECTED);
     assertThat(response.getBody().getId()).isNull();
-    assertThat(response.getBody().getMessage()).contains("Invalid ISO 4217 currency code");
+    assertThat(response.getBody().getDescription()).contains("Invalid ISO 4217 currency code");
   }
 
   @Test
@@ -109,7 +109,7 @@ class PaymentGatewayFunctionalTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().getStatus()).isEqualTo(PaymentStatus.REJECTED);
     assertThat(response.getBody().getId()).isNull();
-    assertThat(response.getBody().getMessage()).contains(";");
+    assertThat(response.getBody().getDescription()).contains(";");
   }
 
   @Test

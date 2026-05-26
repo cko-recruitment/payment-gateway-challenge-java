@@ -151,7 +151,7 @@ class PaymentGatewayControllerTest {
   void shouldReturnRejectedResponseWhenValidationFails() throws Exception {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.REJECTED);
-    response.setErrorMessage("Currency must be one of: [USD, EUR, GBP]");
+    response.setDescription("Currency must be one of: [USD, EUR, GBP]");
 
     when(paymentGatewayService.processPayment(anyString(), any(PostPaymentRequest.class), any()))
         .thenReturn(response);
@@ -173,6 +173,6 @@ class PaymentGatewayControllerTest {
             .content(requestJson))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("Rejected"))
-        .andExpect(jsonPath("$.message").value("Currency must be one of: [USD, EUR, GBP]"));
+        .andExpect(jsonPath("$.description").value("Currency must be one of: [USD, EUR, GBP]"));
   }
 }

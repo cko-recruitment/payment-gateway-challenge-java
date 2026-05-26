@@ -5,6 +5,7 @@ import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
+import com.checkout.payment.gateway.model.Link;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.IdempotencyRepository;
@@ -72,6 +73,10 @@ public class PaymentGatewayService {
     } else {
       secureLogger.info("Payment processed successfully: merchant={}, id={}, status={}", merchantId, response.getId(), response.getStatus());
     }
+
+    // HATEOAS: add links for next actions
+    response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
+    response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
 
     return response;
   }

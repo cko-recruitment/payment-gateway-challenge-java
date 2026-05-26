@@ -1,9 +1,11 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.GatewayCode;
+import io.swagger.v3.oas.annotations.media.Schema;
 
+@Schema(description = "Response for payment retrieval via GET endpoints")
 public class GetPaymentResponse extends PostPaymentResponse {
-  
+
   public static GetPaymentResponse from(PostPaymentResponse postResponse) {
     GetPaymentResponse getResponse = new GetPaymentResponse();
     getResponse.setId(postResponse.getId());
@@ -14,8 +16,9 @@ public class GetPaymentResponse extends PostPaymentResponse {
     getResponse.setCurrency(postResponse.getCurrency());
     getResponse.setAmount(postResponse.getAmount());
     getResponse.setCode(postResponse.getCode());
-    getResponse.setMessage(postResponse.getMessage());
-    getResponse.setRetryable(postResponse.isRetryable());
+    getResponse.setDescription(postResponse.getDescription());
+    getResponse.setAction(postResponse.getAction());
+    getResponse.setLinks(postResponse.getLinks());
     return getResponse;
   }
 

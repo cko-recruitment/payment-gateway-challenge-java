@@ -71,7 +71,7 @@ public class RateLimitAspect {
   private ResponseEntity<PostPaymentResponse> rejected(String message) {
     PostPaymentResponse rejected = new PostPaymentResponse();
     rejected.setStatus(com.checkout.payment.gateway.enums.PaymentStatus.REJECTED);
-    rejected.setMessage(message);
+    rejected.setDescription(message);
     return new ResponseEntity<>(rejected, HttpStatus.OK);
   }
 
