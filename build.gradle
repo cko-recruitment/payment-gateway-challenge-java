@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'idea'
     id 'eclipse'
+    id 'jacoco'
     id 'org.springframework.boot' version '3.1.5'
     id 'io.spring.dependency-management' version '1.0.15.RELEASE'
 }
@@ -87,6 +88,54 @@ tasks.withType(Test) {
             println "\nTest result: ${result.resultType}"
             println "Tests: ${result.testCount}, Passed: ${result.successfulTestCount}, Failed: ${result.failedTestCount}, Skipped: ${result.skippedTestCount}"
         }
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    // Include all source sets in coverage
+    executionData(
+        fileTree(project.buildDir).include("**/jacoco/*.exec")
+    )
+    sourceSets sourceSets.main
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+// Unified coverage report including unit + integration + functional tests
+task jacocoFullReport(type: JacocoReport) {
+    group = 'verification'
+    description = 'Generates unified coverage report from all test types'
+    
+    dependsOn test, integrationTest, functionalTest
+    
+    executionData(
+        fileTree(project.buildDir).include("**/jacoco/*.exec")
+    )
+    
+    sourceSets sourceSets.main
+    
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
     }
 }
 
