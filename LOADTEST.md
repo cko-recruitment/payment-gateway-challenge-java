@@ -17,45 +17,125 @@ We use **k6** for load testing. Alternatives include JMeter, Gatling, Locust, Ap
 
 - Docker & Docker Compose
 - Application running (`docker-compose up -d`)
-- Observability stack optional (`docker-compose -f docker-compose.observability.yml up -d`)
+- Observability stack (`docker-compose -f docker-compose.observability.yml up -d`)
 
-## k6 Built-in Variables
+## Architecture
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `__VU` | number | Virtual User ID (starts at 1) |
-| `__ITER` | number | Iteration count per VU (starts at 0) |
-| `__ENV` | object | Environment variables access |
-
-### Usage Example
-
-```javascript
-const merchantId = `merchant-${__VU}`;
-const idempotencyKey = `key-${__VU}-${__ITER}`;
+```
+┌─────────┐     HTTP      ┌─────────────────┐
+│   k6    │ ─────────────►│  Payment Gateway│
+│ (Load)  │               │   :8090         │
+└─────────┘               └────────┬────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │  Bank Simulator │
+                          │   :8080         │
+                          └─────────────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │   Prometheus    │◄── scrape /actuator/prometheus
+                          │   :9090         │
+                          └────────┬────────┘
+                                   │ query
+                          ┌────────▼────────┐
+                          │    Grafana      │◄── Dashboard http://localhost:3000
+                          │   :3000         │
+                          └─────────────────┘
 ```
 
-- `__VU` ensures each virtual user uses a different merchant
-- `__ITER` ensures idempotency keys are unique across iterations
+## Step-by-Step Operation
 
-## Quick Start
-
-### Smoke Test (1 user, 10 seconds)
+### 1. Start Application Stack
 
 ```bash
+# Terminal 1: Start payment gateway + bank simulator
+docker-compose up -d
+
+# Verify
+docker-compose ps
+curl http://localhost:8090/actuator/health
+```
+
+### 2. Start Observability Stack
+
+```bash
+# Terminal 2: Start Prometheus + Grafana
+docker-compose -f docker-compose.observability.yml up -d
+
+# Verify Prometheus targets
+curl http://localhost:9090/api/v1/targets
+
+# Open Grafana (admin/admin)
+open http://localhost:3000/d/payment-gateway/payment-gateway
+```
+
+### 3. Run Smoke Test
+
+```bash
+# Terminal 3: Quick sanity check
 docker run --rm \
   -v $(pwd)/load-tests:/tests \
   -e BASE_URL=http://host.docker.internal:8090 \
   grafana/k6 run /tests/smoke-test.js
 ```
 
-### Load Test (ramp to 100 VUs)
+**Expected output:**
+```
+✓ status is 200
+✓ authorized or declined
+
+checks.....................: 100.00% ✓ 20 ✗ 0
+http_req_duration..........: avg=15.23ms min=10.1ms med=14.5ms max=25.3ms
+```
+
+### 4. Run Load Test
 
 ```bash
-# Start observability stack (optional but recommended)
-docker-compose -f docker-compose.observability.yml up -d
-
-# Run load test
+# Terminal 3: Full load test with Grafana monitoring
 docker-compose -f docker-compose.loadtest.yml up
+```
+
+**Test stages:**
+
+| Time | VUs | Behavior |
+|------|-----|----------|
+| 0-30s | 10→50 | Ramp up |
+| 30-90s | 50 | Steady load |
+| 90-120s | 50→100 | Peak load (triggers rate limit) |
+| 120-150s | 100→0 | Ramp down |
+
+### 5. Observe in Grafana
+
+Open http://localhost:3000/d/payment-gateway/payment-gateway
+
+Watch these panels during test:
+
+| Panel | Expected | Warning |
+|-------|----------|---------|
+| **QPS** | Linear growth | Plateau = rate limit |
+| **P99 Latency** | Stable < 200ms | Spike > 500ms |
+| **Throughput by Status** | Mostly AUTHORIZED | REJECTED increase |
+| **Rate Limit Hits** | 0 at low VUs | Spikes at 100 VUs |
+
+### 6. Analyze Results
+
+**k6 output summary:**
+```
+http_req_duration........: avg=45.2ms min=12.1ms med=38.5ms max=523ms p(95)=120ms p(99)=350ms
+http_reqs................: 2456 total
+rate_limit_hits..........: 312 total
+```
+
+**PromQL verification:**
+```promql
+# Actual QPS during test
+sum(rate(payment_total[1m]))
+
+# Rate limit percentage
+sum(rate(rate_limit_hits[1m])) / sum(rate(payment_total[1m])) * 100
+
+# P99 at peak
+histogram_quantile(0.99, sum(rate(payment_latency_seconds_bucket[5m])) by (le))
 ```
 
 ## Test Scenarios
@@ -63,124 +143,28 @@ docker-compose -f docker-compose.loadtest.yml up
 | File | VUs | Duration | Purpose | Rate Limit |
 |------|-----|----------|---------|------------|
 | `smoke-test.js` | 1 | 10s | Sanity check | No |
-| `load-test.js` | 10→50→100 | 2.5m | Performance baseline | **Yes** (detects & backs off) |
+| `load-test.js` | 10→50→100 | 2.5m | Performance baseline | **Yes** |
 
-## k6 Script Reference
+## Rate Limit Behavior
 
-### HTTP Requests
+Our API has **10 req/s per merchant** limit.
 
-```javascript
-import http from 'k6/http';
+At 100 VUs (100 merchants):
+- Each merchant: ~1 req/s (under limit)
+- Total: ~100 req/s (no rate limit)
 
-http.get(url, params);
-http.post(url, body, params);
-http.put(url, body, params);
-http.del(url, body, params);
-```
-
-### Checks (Assertions)
-
-```javascript
-import { check } from 'k6';
-
-check(response, {
-  'status is 200': (r) => r.status === 200,
-  'response time < 500ms': (r) => r.timings.duration < 500,
-});
-```
-
-### Custom Metrics
-
-```javascript
-import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
-
-const myCounter = new Counter('my_counter');
-const myTrend = new Trend('my_trend');
-
-export default function () {
-  myCounter.add(1);
-  myTrend.add(100);
-}
-```
-
-### Lifecycle Hooks
-
-```javascript
-// Setup: runs once before all VUs
-export function setup() {
-  const token = login();
-  return { token };
-}
-
-// Default: runs repeatedly for each VU
-export default function (data) {
-  http.get(url, { headers: { Authorization: data.token } });
-}
-
-// Teardown: runs once after all VUs complete
-export function teardown(data) {
-  console.log('Test completed');
-}
-```
-
-### Options Configuration
-
-```javascript
-export const options = {
-  vus: 10,                    // Virtual users
-  duration: '30s',            // Test duration
-  iterations: 100,            // Total iterations
-  stages: [                   // Ramp stages
-    { duration: '30s', target: 10 },
-    { duration: '1m', target: 50 },
-    { duration: '30s', target: 100 },
-  ],
-  thresholds: {               // Pass/fail criteria
-    http_req_duration: ['p(95)<500'],
-    errors: ['rate<0.1'],
-  },
-};
-```
-
-## Thresholds
-
-| Metric | Threshold | Meaning |
-|--------|-----------|---------|
-| P95 latency | < 500ms | 95% of requests under 500ms |
-| Error rate | < 10% | Less than 10% failed requests |
-
-## Metrics During Test
-
-### k6 Output
-- `http_req_duration` — Request latency
-- `http_reqs` — Requests per second
-- `errors` — Error rate
-- `rate_limit_hits` — Rate limit triggered count
-
-### Prometheus/Grafana
-- `payment_latency_seconds` — Business-level latency
-- `bank_latency_seconds` — Bank API latency
-- `payment_total` — Throughput by status
-- `rate_limit_hits` — Rate limiting pressure
-
-## Grafana Dashboard
-
-Access http://localhost:3000 during load test (admin/admin).
-
-Watch for:
-- QPS trends (plateau = rate limit hit)
-- Latency percentiles
-- Error spikes
-- **Rate limit hits** (`rate_limit_hits` metric)
-- JVM memory/CPU usage
-
-### Rate Limit Behavior
-
-At 100 VUs, expect:
-- ~10% requests rate limited (10 req/s per merchant limit)
-- k6 detects `Rejected` + `Rate limit` description
+At 100 VUs (same merchant):
+- Single merchant: ~100 req/s (**over limit**)
+- ~90% requests rate limited
+- k6 detects `Rejected` + `Rate limit` response
 - Automatic 1s backoff applied
-- QPS plateaus at ~10 req/s per merchant
+
+**Current script uses `merchant-${__VU}`** → each VU = different merchant → minimal rate limit.
+
+To test rate limiting, modify script:
+```javascript
+const merchantId = 'merchant-fixed';  // Same merchant for all VUs
+```
 
 ## Cleanup
 
@@ -194,3 +178,12 @@ docker-compose -f docker-compose.observability.yml down
 # Stop application
 docker-compose down
 ```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| k6 cannot connect | Check `BASE_URL`, use `host.docker.internal` |
+| No metrics in Grafana | Verify Prometheus targets, check `/actuator/prometheus` |
+| Rate limit too aggressive | Adjust `RateLimitAspect` MAX_PER_SECOND |
+| Out of memory | Reduce VUs or add JVM heap flags |
