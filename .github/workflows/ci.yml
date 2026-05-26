@@ -35,6 +35,9 @@ jobs:
           sleep 5
           curl -f http://localhost:2525/imposters || (echo "Bank simulator failed to start" && exit 1)
 
+      - name: Set Bank URL for CI
+        run: echo "BANK_URL=http://localhost:8080/payments" >> $GITHUB_ENV
+
       - name: Build
         run: ./gradlew build -x test
 
