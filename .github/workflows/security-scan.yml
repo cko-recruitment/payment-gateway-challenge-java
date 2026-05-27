@@ -92,7 +92,7 @@ jobs:
 
             ### CodeQL Analysis
             - Status: ${{ job.status == 'success' && '✅ Completed' || '❌ Failed' }}
-            - Results: View in [Security tab](../../security/code-scanning)
+            - Results: View in [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)
 
             ### OWASP Dependency-Check
             | Severity | Count |
@@ -102,7 +102,7 @@ jobs:
             | 🟡 Medium | ${{ env.DEP_CHECK_MEDIUM }} |
             | 🔵 Low | ${{ env.DEP_CHECK_LOW }} |
 
-            📄 [Full Dependency Check Report](../../actions/runs/${{ github.run_id }})
+            📄 [Full Dependency Check Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
             *Scan completed at ${{ github.event.head_commit.timestamp }}*
 
