@@ -47,12 +47,21 @@ jobs:
       - name: OWASP Dependency Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./gradlew dependencyCheckAnalyze --info || true
+        run: |
+          ./gradlew dependencyCheckAnalyze --info || echo "Dependency check failed, continuing..."
+          # Ensure report directory exists even if scan fails
+          mkdir -p build/reports
 
       - name: Copy Dependency Check Report
         run: |
           mkdir -p reports
-          cp build/reports/dependency-check-report.* reports/ || true
+          if [ -d "build/reports" ]; then
+            cp build/reports/dependency-check-report.* reports/ 2>/dev/null || echo "No dependency check reports found"
+          else
+            echo "Build reports directory not found"
+          fi
+          # List what we have
+          ls -la reports/ || echo "Reports directory is empty"
 
       - name: Parse Dependency Check Results
         if: github.event_name == 'pull_request'
