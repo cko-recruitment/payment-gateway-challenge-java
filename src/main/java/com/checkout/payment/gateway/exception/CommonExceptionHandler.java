@@ -7,7 +7,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RequestHeader;
 
 @ControllerAdvice
 public class CommonExceptionHandler {
@@ -19,12 +18,11 @@ public class CommonExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<BasePaymentResponse> handleGenericException(
-      Exception ex,
-      @RequestHeader(value = "Merchant-Id", required = false) String merchantId) {
-    secureLogger.error("Unexpected error occurred for merchant={}", merchantId, ex);
+  public ResponseEntity<BasePaymentResponse> handleGenericException(Exception ex) {
+    secureLogger.error("Unexpected error occurred", ex);
     BasePaymentResponse response = new BasePaymentResponse();
     response.setGatewayCode(GatewayCode.INTERNAL_ERROR);
+    response.setDescription("An unexpected error occurred");
     return new ResponseEntity<>(response, HttpStatus.OK);
   }
 }
