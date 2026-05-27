@@ -1,0 +1,149 @@
+### Payment Gateway API Demo
+### VS Code: Install "REST Client" extension by Huachao Mao
+
+# @name cleanup
+# Cleanup before demo
+
+###
+# @name Step1_HealthCheck
+GET http://localhost:8090/actuator/health
+
+###
+# @name Step2_SuccessPayment
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-success-1
+
+{
+  "card_number": "4242424242424241",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step3_CacheHit
+# Same key - returns cached result
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-success-1
+
+{
+  "card_number": "4242424242424241",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step4_ValidationError
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-validation-1
+
+{
+  "card_number": "abc",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step5_ValidationCacheHit
+# Same key - cached validation error
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-validation-1
+
+{
+  "card_number": "abc",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step6_RetriableError
+# Card ending in 0 -> Bank returns 503
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-retry-1
+
+{
+  "card_number": "4242424242424240",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step7_RetryAgain
+# Same key - retries bank call
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-retry-1
+
+{
+  "card_number": "4242424242424240",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step8_DeclinedPayment
+# Card ending in even number -> Declined
+POST http://localhost:8090/api/v1/payments
+Content-Type: application/json
+Merchant-Id: merchant-123
+Idempotency-Key: demo-decline-1
+
+{
+  "card_number": "4242424242424242",
+  "expiry_month": 12,
+  "expiry_year": 2027,
+  "currency": "USD",
+  "amount": 100,
+  "cvv": "123"
+}
+
+###
+# @name Step9_GetById
+# Use the id from Step2 response
+GET http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-446655440000
+Merchant-Id: merchant-123
+
+###
+# @name Step10_GetByIdempotencyKey
+GET http://localhost:8090/api/v1/payments/idempotency/demo-success-1
+Merchant-Id: merchant-123
+
+###
+# @name Step11_SwaggerUI
+GET http://localhost:8090/swagger-ui.html
+
+###
+# @name Step12_PrometheusMetrics
+GET http://localhost:8090/actuator/prometheus
+
+###
+# @name Step13_HealthCheck
+GET http://localhost:8090/actuator/health
