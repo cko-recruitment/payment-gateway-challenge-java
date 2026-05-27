@@ -1,0 +1,80 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      previous_version:
+        description: 'Previous image tag to rollback to (leave empty for last successful)'
+        required: false
+        type: string
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          # 配置 kubectl（根据环境选择）
+          if [ "${{ inputs.environment }}" == "prod" ]; then
+            # 生产环境用阿里云
+            aliyun cs GET /k8s/$(terraform -chdir=terraform/aliyun output -raw cluster_id)/user_config > kubeconfig
+            export KUBECONFIG=kubeconfig
+          fi
+
+      - name: Get Previous Version
+        id: get_version
+        run: |
+          if [ -n "${{ inputs.previous_version }}" ]; then
+            echo "version=${{ inputs.previous_version }}" >> $GITHUB_OUTPUT
+          else
+            # 获取上一个成功的 deployment 镜像
+            PREVIOUS_IMAGE=$(kubectl get deployment payment-gateway -n payment-gateway -o jsonpath='{.spec.template.spec.containers[0].image}')
+            echo "version=$(echo $PREVIOUS_IMAGE | cut -d':' -f2)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rollback
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          echo "Rolling back to version: $VERSION"
+          
+          # 更新镜像
+          kubectl set image deployment/payment-gateway \
+            payment-gateway=payment-gateway:$VERSION \
+            -n payment-gateway
+          
+          # 等待 rollback 完成
+          kubectl rollout status deployment/payment-gateway \
+            -n payment-gateway \
+            --timeout=300s
+
+      - name: Verify Rollback
+        run: |
+          kubectl get pods -n payment-gateway
+          kubectl describe deployment payment-gateway -n payment-gateway | grep Image
+
+      - name: Post Rollback Summary
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: rollback-summary
+          message: |
+            ## ↩️ Rollback Summary
+
+            | Item | Value |
+            |------|-------|
+            | Environment | ${{ inputs.environment }} |
+            | Rolled back to | ${{ steps.get_version.outputs.version }} |
+            | Status | ✅ Success |

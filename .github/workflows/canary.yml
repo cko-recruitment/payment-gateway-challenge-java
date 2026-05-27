@@ -1,0 +1,215 @@
+name: Canary Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud Provider'
+        required: true
+        default: 'aliyun'
+        type: choice
+        options:
+          - aliyun
+          - aws
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+      canary_percentage:
+        description: 'Canary traffic percentage (1-50)'
+        required: true
+        default: '10'
+        type: choice
+        options:
+          - '1'
+          - '5'
+          - '10'
+          - '25'
+          - '50'
+      auto_promote:
+        description: 'Auto promote to 100% after health check'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  canary:
+    name: Canary ${{ inputs.canary_percentage }}% - ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build Application
+        run: ./gradlew bootJar
+
+      - name: Build Docker Image
+        run: |
+          docker build -t payment-gateway:${{ github.sha }} .
+
+      - name: Push to Registry
+        env:
+          ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+          ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
+        run: |
+          docker login --username=${{ secrets.ALICLOUD_REGISTRY_USER }} \
+            registry.cn-hangzhou.aliyuncs.com \
+            --password=${{ secrets.ALICLOUD_REGISTRY_PASSWORD }}
+          docker tag payment-gateway:${{ github.sha }} \
+            registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }}
+          docker push \
+            registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }}
+
+      - name: Configure kubectl
+        run: |
+          aliyun cs GET /k8s/$(terraform -chdir=terraform/aliyun output -raw cluster_id)/user_config > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy Canary
+        run: |
+          # 创建 canary deployment（新版本，少量副本）
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: payment-gateway-canary
+            namespace: payment-gateway
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: payment-gateway
+                version: canary
+            template:
+              metadata:
+                labels:
+                  app: payment-gateway
+                  version: canary
+              spec:
+                containers:
+                - name: payment-gateway
+                  image: registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }}
+                  ports:
+                  - containerPort: 8090
+          EOF
+
+          # 等待 canary ready
+          kubectl rollout status deployment/payment-gateway-canary \
+            -n payment-gateway \
+            --timeout=300s
+
+      - name: Configure Traffic Split
+        run: |
+          # 使用 Istio VirtualService 分流
+          # 1% traffic → canary, 99% → stable
+          cat <<EOF | kubectl apply -f -
+          apiVersion: networking.istio.io/v1beta1
+          kind: VirtualService
+          metadata:
+            name: payment-gateway-canary
+            namespace: payment-gateway
+          spec:
+            hosts:
+            - payment-gateway
+            http:
+            - match:
+              - headers:
+                  x-canary:
+                    exact: "true"
+              route:
+              - destination:
+                  host: payment-gateway
+                  subset: canary
+                weight: 100
+            - route:
+              - destination:
+                  host: payment-gateway
+                  subset: stable
+                weight: ${{ inputs.canary_percentage == '1' && '99' || inputs.canary_percentage == '5' && '95' || inputs.canary_percentage == '10' && '90' || inputs.canary_percentage == '25' && '75' || '50' }}
+              - destination:
+                  host: payment-gateway
+                  subset: canary
+                weight: ${{ inputs.canary_percentage }}
+          EOF
+
+      - name: Health Check
+        id: health_check
+        run: |
+          echo "Waiting for metrics..."
+          sleep 30
+          
+          # 检查 canary pod 状态
+          CANARY_PODS=$(kubectl get pods -n payment-gateway -l version=canary --field-selector=status.phase=Running --no-headers | wc -l)
+          echo "Running canary pods: $CANARY_PODS"
+          
+          # 检查错误率（需要 Prometheus）
+          # curl -s "http://prometheus:9090/api/v1/query?query=rate(http_requests_total{version=\"canary\"}[5m])"
+          
+          if [ "$CANARY_PODS" -ge 1 ]; then
+            echo "health_status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "health_status=unhealthy" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Auto Promote or Rollback
+        if: inputs.auto_promote == true
+        run: |
+          if [ "${{ steps.health_check.outputs.health_status }}" == "healthy" ]; then
+            echo "✅ Canary healthy, promoting to 100%..."
+            
+            # 更新 stable deployment 到新版
+            kubectl set image deployment/payment-gateway \
+              payment-gateway=registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }} \
+              -n payment-gateway
+            
+            kubectl rollout status deployment/payment-gateway \
+              -n payment-gateway \
+              --timeout=300s
+            
+            # 删除 canary
+            kubectl delete deployment payment-gateway-canary -n payment-gateway
+            
+            # 恢复 100% traffic 到 stable
+            kubectl apply -f k8s/istio/virtualservice.yaml
+            
+          else
+            echo "❌ Canary unhealthy, rolling back..."
+            kubectl delete deployment payment-gateway-canary -n payment-gateway
+            kubectl apply -f k8s/istio/virtualservice.yaml
+            exit 1
+          fi
+
+      - name: Post Canary Summary
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: canary-summary
+          message: |
+            ## 🐤 Canary Deployment Summary
+
+            | Item | Value |
+            |------|-------|
+            | Cloud Provider | ${{ inputs.cloud_provider }} |
+            | Environment | ${{ inputs.environment }} |
+            | Canary Traffic | ${{ inputs.canary_percentage }}% |
+            | Image Tag | ${{ github.sha }} |
+            | Health Status | ${{ steps.health_check.outputs.health_status == 'healthy' && '✅ Healthy' || '❌ Unhealthy' }} |
+            | Auto Promote | ${{ inputs.auto_promote && 'Enabled' || 'Manual' }} |
+
+            ### Next Steps
+            ${{ inputs.auto_promote == false && '
+            - [ ] Monitor metrics for 10-30 minutes
+            - [ ] If healthy: run workflow again with higher percentage
+            - [ ] If unhealthy: run Rollback workflow
+            ' || '
+            - Canary auto-promoted to 100%
+            ' }}
