@@ -45,17 +45,12 @@ jobs:
 
       # OWASP Dependency-Check - Scan for known vulnerabilities in dependencies
       - name: OWASP Dependency Check
+        run: ./gradlew dependencyCheckAnalyze
+
+      - name: Copy Dependency Check Report
         run: |
-          docker run --rm \
-            -v $(pwd):/src \
-            -v $(pwd)/reports:/reports \
-            owasp/dependency-check:latest \
-            --project payment-gateway \
-            --scan /src \
-            --format ALL \
-            --out /reports \
-            --enableRetired \
-            --enableExperimental
+          mkdir -p reports
+          cp build/reports/dependency-check-report.* reports/ || true
 
       - name: Parse Dependency Check Results
         if: github.event_name == 'pull_request'
