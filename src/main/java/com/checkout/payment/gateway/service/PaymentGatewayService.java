@@ -11,6 +11,7 @@ import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.security.SecureLogger;
+import java.time.Instant;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,7 @@ public class PaymentGatewayService {
     try {
       // Double-check after acquiring lock
       Optional<PostPaymentResponse> existing = idempotencyRepository.getByKey(merchantId, dedupeKey);
+      Instant originalCreatedAt = null;
       if (existing.isPresent()) {
         PostPaymentResponse cached = existing.get();
         if (!isRetriable(cached)) {
@@ -74,6 +76,7 @@ public class PaymentGatewayService {
           return cached;
         }
         secureLogger.info("Previous attempt was retriable for merchant={}, key={}, retrying", merchantId, dedupeKey);
+        originalCreatedAt = cached.getCreatedAt();
       }
 
       try {
@@ -89,6 +92,9 @@ public class PaymentGatewayService {
         response.setCurrency(paymentRequest.getCurrency().toUpperCase());
         response.setAmount(paymentRequest.getAmount());
         response.setGatewayCode(status == PaymentStatus.AUTHORIZED ? GatewayCode.SUCCESS : GatewayCode.DECLINED);
+        Instant now = Instant.now();
+        response.setCreatedAt(originalCreatedAt != null ? originalCreatedAt : now);
+        response.setUpdatedAt(now);
 
         if (dedupeKey != null && !dedupeKey.isBlank()) {
           idempotencyRepository.save(merchantId, dedupeKey, response);
@@ -98,7 +104,21 @@ public class PaymentGatewayService {
 
       } catch (HttpServerErrorException ex) {
         secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
-        throw new BankProcessingException("Bank error: " + ex.getStatusCode(), ex);
+        // Save retriable error to cache so client can retry with same key
+        PostPaymentResponse errorResponse = new PostPaymentResponse();
+        errorResponse.setStatus(PaymentStatus.DECLINED);
+        if (ex.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+          errorResponse.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
+        } else {
+          errorResponse.setGatewayCode(GatewayCode.BANK_ERROR);
+        }
+        Instant now = Instant.now();
+        errorResponse.setCreatedAt(originalCreatedAt != null ? originalCreatedAt : now);
+        errorResponse.setUpdatedAt(now);
+        if (dedupeKey != null && !dedupeKey.isBlank()) {
+          idempotencyRepository.save(merchantId, dedupeKey, errorResponse);
+        }
+        return errorResponse;
       }
     } finally {
       lock.unlock();

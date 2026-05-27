@@ -129,6 +129,10 @@ curl -s http://localhost:8090/api/v1/payments \
 
 ### Step 4: Test Idempotency
 
+Use `createdAt` and `updatedAt` to trace request history:
+- `createdAt == updatedAt` → First attempt or cached non-retriable
+- `createdAt < updatedAt` → Retried (bank called again)
+
 **Non-Retriable Error** (action=fix_request) - Cached forever:
 
 ```bash
@@ -141,8 +145,8 @@ curl -s http://localhost:8090/api/v1/payments \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: $KEY" \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{code, action}'
-# → {"code": "INVALID_REQUEST", "action": "fix_request"}
+  | jq '{createdAt, updatedAt, code, action}'
+# → createdAt == updatedAt (first attempt)
 
 # Same key - returns cached error (no retry)
 curl -s http://localhost:8090/api/v1/payments \
@@ -151,8 +155,8 @@ curl -s http://localhost:8090/api/v1/payments \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: $KEY" \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{code, action}'
-# → {"code": "INVALID_REQUEST", "action": "fix_request"}
+  | jq '{createdAt, updatedAt, code, action}'
+# → createdAt == updatedAt (cached, same timestamps)
 ```
 
 **Retriable Error** (action=retry) - Retried on next request:
@@ -167,18 +171,18 @@ curl -s http://localhost:8090/api/v1/payments \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: $KEY" \
   -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{code, action}'
-# → {"code": "BANK_ERROR", "action": "retry"}
+  | jq '{createdAt, updatedAt, code, action}'
+# → createdAt == updatedAt (first attempt)
 
-# Same key - retries bank call (may succeed if bank recovers)
+# Same key - retries bank call (bank still down)
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: $KEY" \
   -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{code, action}'
-# → {"code": "BANK_ERROR", "action": "retry"} (bank still down)
+  | jq '{createdAt, updatedAt, code, action}'
+# → createdAt < updatedAt (retried! updatedAt changed)
 ```
 
 ---

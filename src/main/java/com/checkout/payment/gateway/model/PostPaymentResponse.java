@@ -3,7 +3,10 @@ package com.checkout.payment.gateway.model;
 import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.UUID;
+
+
 
 @Schema(description = "Response for payment processing and retrieval")
 public class PostPaymentResponse extends BasePaymentResponse {
@@ -28,6 +31,12 @@ public class PostPaymentResponse extends BasePaymentResponse {
 
   @Schema(description = "Amount in minor units", example = "100")
   private Integer amount;
+
+  @Schema(description = "When this payment was first created", example = "2024-01-15T10:30:00Z")
+  private Instant createdAt;
+
+  @Schema(description = "When this payment was last updated", example = "2024-01-15T10:30:00Z")
+  private Instant updatedAt;
 
   public UUID getId() {
     return id;
@@ -85,12 +94,31 @@ public class PostPaymentResponse extends BasePaymentResponse {
     this.amount = amount;
   }
 
+  public Instant getCreatedAt() {
+    return createdAt;
+  }
+
+  public void setCreatedAt(Instant createdAt) {
+    this.createdAt = createdAt;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  public void setUpdatedAt(Instant updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
   public static PostPaymentResponse rejected(String description) {
     PostPaymentResponse response = new PostPaymentResponse();
     response.setStatus(PaymentStatus.REJECTED);
     response.setDescription(description);
     response.setGatewayCode(GatewayCode.INVALID_REQUEST);
     response.addLink(new Link("self", "/api/v1/payments", "POST"));
+    Instant now = Instant.now();
+    response.setCreatedAt(now);
+    response.setUpdatedAt(now);
     return response;
   }
 
@@ -113,6 +141,8 @@ public class PostPaymentResponse extends BasePaymentResponse {
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
+        ", createdAt=" + createdAt +
+        ", updatedAt=" + updatedAt +
         '}';
   }
 }

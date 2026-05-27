@@ -10,6 +10,7 @@ import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.security.SecureLogger;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -74,6 +75,12 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     try {
       PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
 
+      // Check if it's a bank error response (retriable)
+      if (response.getCode() != null && (response.getCode().equals("BANK_UNAVAILABLE") || response.getCode().equals("BANK_ERROR"))) {
+        response.addLink(new Link("self", "/api/v1/payments", "POST"));
+        return new ResponseEntity<>(response, HttpStatus.OK);
+      }
+
       response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
       response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
 
@@ -81,9 +88,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     } catch (PaymentValidationException ex) {
       secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
       return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
-    } catch (BankProcessingException ex) {
-      secureLogger.error("Bank processing failed for merchant={}", merchantId, ex);
-      return new ResponseEntity<>(bankErrorResponse(ex), HttpStatus.OK);
     }
   }
 
@@ -102,6 +106,9 @@ public class PaymentGatewayController implements PaymentGatewayApi {
       response.setDescription(ex.getMessage());
       response.setGatewayCode(GatewayCode.BANK_ERROR);
     }
+    Instant now = Instant.now();
+    response.setCreatedAt(now);
+    response.setUpdatedAt(now);
     return response;
   }
 
