@@ -164,19 +164,20 @@ jobs:
           rules_file_name: '.zap/rules.tsv'
           cmd_options: '-a'
           allow_issue_writing: false
-          artifact_name: ''  # Disable automatic artifact upload
 
       - name: Parse ZAP Results
         if: always()
         run: |
-          # ZAP action creates report_*.html files
-          # Extract alert counts from the JSON report if available
-          if [ -f "report_json.json" ]; then
-            HIGH=$(jq '[.site[0].alerts[] | select(.riskcode == "3")] | length' report_json.json 2>/dev/null || echo "0")
-            MEDIUM=$(jq '[.site[0].alerts[] | select(.riskcode == "2")] | length' report_json.json 2>/dev/null || echo "0")
-            LOW=$(jq '[.site[0].alerts[] | select(.riskcode == "1")] | length' report_json.json 2>/dev/null || echo "0")
-            INFO=$(jq '[.site[0].alerts[] | select(.riskcode == "0")] | length' report_json.json 2>/dev/null || echo "0")
+          # Find ZAP report files (action creates them with timestamp)
+          ZAP_JSON=$(ls -t report_*.json 2>/dev/null | head -1)
+          if [ -n "$ZAP_JSON" ] && [ -f "$ZAP_JSON" ]; then
+            echo "Found ZAP report: $ZAP_JSON"
+            HIGH=$(jq '[.site[0].alerts[]? | select(.riskcode == "3")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.site[0].alerts[]? | select(.riskcode == "2")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
+            LOW=$(jq '[.site[0].alerts[]? | select(.riskcode == "1")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
+            INFO=$(jq '[.site[0].alerts[]? | select(.riskcode == "0")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
           else
+            echo "No ZAP JSON report found"
             HIGH=0
             MEDIUM=0
             LOW=0
@@ -187,15 +188,6 @@ jobs:
           echo "ZAP_MEDIUM=$MEDIUM" >> $GITHUB_ENV
           echo "ZAP_LOW=$LOW" >> $GITHUB_ENV
           echo "ZAP_INFO=$INFO" >> $GITHUB_ENV
-
-      - name: Upload ZAP Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: zap-report
-          path: |
-            report_*.html
-            report_json.json
 
       - name: Post DAST Summary
         if: github.event_name == 'pull_request' && always()
