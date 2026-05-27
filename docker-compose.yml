@@ -11,6 +11,7 @@ services:
       - "8090:8090"
     environment:
       - SPRING_PROFILES_ACTIVE=dev
+      - BANK_URL=http://bank_simulator:8080/payments
     depends_on:
       - bank_simulator
 

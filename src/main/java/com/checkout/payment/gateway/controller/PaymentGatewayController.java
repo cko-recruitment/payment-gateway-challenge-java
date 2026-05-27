@@ -105,7 +105,4 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     return response;
   }
 
-  private boolean isRetriable(PostPaymentResponse response) {
-    return "retry".equals(response.getAction());
-  }
 }

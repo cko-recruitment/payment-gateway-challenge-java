@@ -10,6 +10,9 @@ Each section contains:
 ### Before Each Demo: Clean Environment
 
 ```bash
+# Stop docker-compose if running
+docker-compose down 2>/dev/null || true
+
 # Kill any running Java processes (Spring Boot app)
 kill $(lsof -t -i:8090) 2>/dev/null || true
 
@@ -17,8 +20,7 @@ kill $(lsof -t -i:8090) 2>/dev/null || true
 docker stop bank-simulator 2>/dev/null || true
 docker rm bank-simulator 2>/dev/null || true
 
-# If port 2525 or 8080 is still in use, kill the process
-kill $(lsof -t -i:2525) 2>/dev/null || true
+# If port 8080 is still in use, kill the process
 kill $(lsof -t -i:8080) 2>/dev/null || true
 
 # Wait for cleanup
@@ -26,7 +28,6 @@ sleep 2
 
 # Verify ports are free
 lsof -i :8090 || echo "Port 8090 is free"
-lsof -i :2525 || echo "Port 2525 is free"
 lsof -i :8080 || echo "Port 8080 is free"
 ```
 
@@ -41,15 +42,19 @@ All responses return HTTP 200. Business result is in the JSON body.
 ### Step 1: Start the Application
 
 ```bash
+# Option 1: Docker Compose (Recommended - starts both app and bank simulator)
+docker-compose up --build
+
+# Option 2: Manual start
 # Terminal 1: Start bank simulator
 docker run -d --name bank-simulator \
-  -p 2525:2525 -p 8080:8080 \
+  -p 8080:8080 \
   -v $(pwd)/imposters:/imposters \
   bbyars/mountebank:2.8.1 \
   --configfile /imposters/bank_simulator.ejs --allowInjection
 
 # Wait for bank simulator
-curl -f http://localhost:2525/imposters || echo "Bank simulator failed"
+sleep 5
 
 # Terminal 2: Start application
 ./gradlew bootRun
@@ -70,11 +75,27 @@ curl -s http://localhost:8090/api/v1/payments \
 # Expected Response
 {
   "code": "SUCCESS",
-  "status": "Authorized",
+  "description": "Payment authorized successfully",
+  "action": "none",
+  "links": [
+    {
+      "rel": "self",
+      "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000",
+      "method": "GET"
+    },
+    {
+      "rel": "idempotency",
+      "href": "/api/v1/payments/idempotency/key-1",
+      "method": "GET"
+    }
+  ],
   "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "Authorized",
   "cardNumberLastFour": 4241,
-  "amount": 100,
-  "currency": "USD"
+  "expiryMonth": 12,
+  "expiryYear": 2027,
+  "currency": "USD",
+  "amount": 100
 }
 ```
 
@@ -93,8 +114,16 @@ curl -s http://localhost:8090/api/v1/payments \
 # Expected Response
 {
   "code": "INVALID_REQUEST",
+  "description": "Card number must be between 14 and 19 digits; Card number must only contain numeric characters",
   "action": "fix_request",
-  "description": "Card number must only contain numeric characters"
+  "links": [
+    {
+      "rel": "self",
+      "href": "/api/v1/payments",
+      "method": "POST"
+    }
+  ],
+  "status": "Rejected"
 }
 ```
 

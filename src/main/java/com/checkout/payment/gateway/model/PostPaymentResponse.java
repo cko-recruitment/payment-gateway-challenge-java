@@ -15,19 +15,19 @@ public class PostPaymentResponse extends BasePaymentResponse {
   private PaymentStatus status;
 
   @Schema(description = "Last four digits of the card", example = "4242")
-  private int cardNumberLastFour;
+  private Integer cardNumberLastFour;
 
   @Schema(description = "Expiry month", example = "12")
-  private int expiryMonth;
+  private Integer expiryMonth;
 
   @Schema(description = "Expiry year", example = "2027")
-  private int expiryYear;
+  private Integer expiryYear;
 
   @Schema(description = "Currency code", example = "USD")
   private String currency;
 
   @Schema(description = "Amount in minor units", example = "100")
-  private int amount;
+  private Integer amount;
 
   public UUID getId() {
     return id;
@@ -45,27 +45,27 @@ public class PostPaymentResponse extends BasePaymentResponse {
     this.status = status;
   }
 
-  public int getCardNumberLastFour() {
+  public Integer getCardNumberLastFour() {
     return cardNumberLastFour;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
+  public void setCardNumberLastFour(Integer cardNumberLastFour) {
     this.cardNumberLastFour = cardNumberLastFour;
   }
 
-  public int getExpiryMonth() {
+  public Integer getExpiryMonth() {
     return expiryMonth;
   }
 
-  public void setExpiryMonth(int expiryMonth) {
+  public void setExpiryMonth(Integer expiryMonth) {
     this.expiryMonth = expiryMonth;
   }
 
-  public int getExpiryYear() {
+  public Integer getExpiryYear() {
     return expiryYear;
   }
 
-  public void setExpiryYear(int expiryYear) {
+  public void setExpiryYear(Integer expiryYear) {
     this.expiryYear = expiryYear;
   }
 
@@ -77,11 +77,11 @@ public class PostPaymentResponse extends BasePaymentResponse {
     this.currency = currency;
   }
 
-  public int getAmount() {
+  public Integer getAmount() {
     return amount;
   }
 
-  public void setAmount(int amount) {
+  public void setAmount(Integer amount) {
     this.amount = amount;
   }
 
