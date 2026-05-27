@@ -48,7 +48,6 @@ lsof -i :8080 || echo "Port 8080 is free"
 | **200-Only** | HTTP status = transport, business result in body. Simplifies client error handling. |
 | **Idempotency Key** | Same key → same result. Prevents duplicate charges on retry. |
 | **Action Field** | `none`/`retry`/`fix_request` tells client what to do next. |
-| **HATEOAS Links** | Response includes next-step URLs. API is self-discoverable. |
 | **createdAt/updatedAt** | Trace retry history without external IDs. |
 
 ### Start Application
@@ -61,7 +60,7 @@ docker-compose up --build
 
 | Step | Request | What to Show |
 |-----|---------|-------------|
-| 2 | `Step2_SuccessPayment` | SUCCESS, id, links |
+| 2 | `Step2_SuccessPayment` | SUCCESS, id |
 | 3 | `Step3_CacheHit` | Same id = cache hit |
 | 4 | `Step4_ValidationError` | INVALID_REQUEST, action=fix_request |
 | 5 | `Step5_ValidationCacheHit` | Same createdAt = cached |
