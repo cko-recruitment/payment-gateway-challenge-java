@@ -1,23 +1,41 @@
 # Payment Gateway - Design Document
 
+## How to Use This Document
+
+Each section contains:
+- **Concept**: Design principle
+- **Demo Steps**: Exact commands to run
+- **Verify**: How to confirm it works
+
+---
+
 ## 1. API Design
 
-### RESTful Principles
+### Concept: 200-Only REST API
 
-| Principle | Implementation |
-|-----------|---------------|
-| Resource-oriented | `/payments`, not `/processPayment` |
-| HTTP verbs | POST (create), GET (read) |
-| Statelessness | No server-side session |
-| Idempotency | `Idempotency-Key` header for safe retries |
+All responses return HTTP 200. Business result is in the JSON body.
 
-### Demo: 200-Only API
+### Step 1: Start the Application
 
 ```bash
-# Start the application
-./gradlew bootRun
+# Terminal 1: Start bank simulator
+docker run -d --name bank-simulator \
+  -p 2525:2525 -p 8080:8080 \
+  -v $(pwd)/imposters:/imposters \
+  bbyars/mountebank:2.8.1 \
+  --configfile /imposters/bank_simulator.ejs --allowInjection
 
-# Successful payment
+# Wait for bank simulator
+curl -f http://localhost:2525/imposters || echo "Bank simulator failed"
+
+# Terminal 2: Start application
+./gradlew bootRun
+```
+
+### Step 2: Test Successful Payment
+
+```bash
+# Request
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
@@ -26,14 +44,21 @@ curl -s http://localhost:8090/api/v1/payments \
   -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq .
 
-# Response:
-# {
-#   "code": "SUCCESS",
-#   "status": "Authorized",
-#   "id": "550e8400-e29b-41d4-a716-446655440000"
-# }
+# Expected Response
+{
+  "code": "SUCCESS",
+  "status": "Authorized",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "cardNumberLastFour": 4241,
+  "amount": 100,
+  "currency": "USD"
+}
+```
 
-# Validation error (still HTTP 200)
+### Step 3: Test Validation Error (Still HTTP 200)
+
+```bash
+# Request with invalid card number
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
@@ -42,15 +67,15 @@ curl -s http://localhost:8090/api/v1/payments \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq .
 
-# Response:
-# {
-#   "code": "INVALID_REQUEST",
-#   "action": "fix_request",
-#   "description": "Card number must only contain numeric characters"
-# }
+# Expected Response
+{
+  "code": "INVALID_REQUEST",
+  "action": "fix_request",
+  "description": "Card number must only contain numeric characters"
+}
 ```
 
-### Demo: Idempotency
+### Step 4: Test Idempotency
 
 ```bash
 # First request - processes payment
@@ -58,267 +83,187 @@ curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: same-key" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}'
+  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '.id'
 
-# Second request with same key - returns cached result (no duplicate charge)
+# Second request with same key - returns cached result
+# Note: Same ID, no duplicate charge
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Merchant-Id: merchant-123" \
   -H "Idempotency-Key: same-key" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}'
-
-# Both return identical response with same ID
-```
-
-### Response Model
-
-```
-BasePaymentResponse
-├── code          (machine-readable)
-├── description   (human-readable)
-├── action        (client guidance: none/retry/fix_request)
-└── links[]       (HATEOAS for next actions)
-
-PostPaymentResponse extends BasePaymentResponse
-├── id            (UUID)
-├── status        (Authorized/Declined/Rejected)
-├── cardNumberLastFour
-├── amount
-└── currency
+  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '.id'
 ```
 
 ---
 
 ## 2. Code Design
 
-### Layered Architecture
+### Concept: SOLID Principles + AOP
 
-```
-Controller (HTTP) → Service (Business) → Repository (Storage)
-       ↓                    ↓                  ↘
-  RateLimitAspect    PaymentMetricsAspect    BankClient
-```
+Clean separation of concerns using interfaces and aspects.
 
-### Demo: SOLID Principles
+### Step 1: View Layered Architecture
 
-```java
-// Single Responsibility: Controller only handles HTTP
-@RestController
-public class PaymentGatewayController {
-    @PostMapping("/payments")
-    public ResponseEntity<PostPaymentResponse> processPayment(...) {
-        // Validate headers, delegate to service
-        PostPaymentResponse response = service.processPayment(...);
-        // Add HATEOAS links
-        return ResponseEntity.ok(response);
-    }
-}
+```bash
+# Open controller (HTTP layer)
+open src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
 
-// Dependency Inversion: Service depends on interface
-@Service
-public class PaymentGatewayService {
-    private final BankClient bankClient;  // Interface, not concrete class
-    private final IdempotencyRepository repository;
-    
-    public PaymentGatewayService(BankClient bankClient, ...) {
-        this.bankClient = bankClient;
-    }
-}
+# Open service (Business layer)
+open src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
 
-// Open/Closed: New bank integration without changing service
-public class NewBankClient implements BankClient {
-    @Override
-    public BankPaymentResponse processPayment(PostPaymentRequest request) {
-        // New bank implementation
-    }
-}
+# Open repository (Data layer)
+open src/main/java/com/checkout/payment/gateway/repository/IdempotencyRepository.java
 ```
 
-### Demo: AOP Cross-Cutting Concerns
+### Step 2: Verify Dependency Inversion
 
-```java
-// Business code stays clean - no rate limit logic here
-@RateLimited  // Just an annotation
-@PostMapping("/payments")
-public ResponseEntity<PostPaymentResponse> processPayment(...) { }
+```bash
+# Service depends on interface, not concrete class
+grep "private final BankClient" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
 
-// Rate limiting implemented in Aspect
-@Aspect
-@Component
-public class RateLimitAspect {
-    @Around("@annotation(RateLimited)")
-    public Object checkLimit(ProceedingJoinPoint pjp) throws Throwable {
-        String merchantId = extractMerchantId(pjp);
-        if (!rateLimiter.allow(merchantId)) {
-            throw new RateLimitExceededException();
-        }
-        return pjp.proceed();
-    }
-}
+# Output: private final BankClient bankClient;
+# Not: private final BankSimulatorClient bankClient;
 ```
 
-### Demo: Concurrent Idempotency
+### Step 3: View AOP in Action
 
-```java
-public PostPaymentResponse processPayment(String merchantId, ..., String dedupeKey) {
-    String lockKey = merchantId + ":" + dedupeKey;
-    ReentrantLock lock = locks.computeIfAbsent(lockKey, k -> new ReentrantLock());
-    lock.lock();
-    try {
-        // Double-check after acquiring lock
-        Optional<PostPaymentResponse> existing = repository.getByKey(merchantId, dedupeKey);
-        if (existing.isPresent() && !isRetriable(existing.get())) {
-            return existing.get();  // Return cached result
-        }
-        // Process payment...
-    } finally {
-        lock.unlock();
-        locks.remove(lockKey);
-    }
-}
+```bash
+# Open rate limit aspect
+open src/main/java/com/checkout/payment/gateway/aspect/RateLimitAspect.java
+
+# Open metrics aspect
+open src/main/java/com/checkout/payment/gateway/aspect/PaymentMetricsAspect.java
+
+# Check that controller has no rate limit logic
+grep -c "rateLimit\|RateLimit" src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
+
+# Output: 0 (business code stays clean)
+```
+
+### Step 4: Verify Concurrent Idempotency
+
+```bash
+# Open the lock implementation
+open src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
+
+# Search for lock usage
+grep -n "ReentrantLock\|lock()\|unlock()" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
 ```
 
 ---
 
 ## 3. Testing Mindset
 
-### Testing Pyramid
+### Concept: Testing Pyramid
 
-```
-         ┌─────────┐
-         │   E2E   │  ← Functional Tests (9 tests, ~30s)
-         │  (Slow) │     Full API flow with real HTTP
-        ┌┴─────────┴┐
-        │ Integration │  ← Integration Tests (9 tests, ~10s)
-        │   (Medium)  │     Service + Bank Simulator
-       ┌┴─────────────┴┐
-       │     Unit       │  ← Unit Tests (36 tests, ~2s)
-       │    (Fast)      │     Isolated, mocked
-       └────────────────┘
-```
+Unit (fast) → Integration (medium) → Functional (slow)
 
-### Demo: Run All Tests
+### Step 1: Run Unit Tests
 
 ```bash
-# Unit tests only (fast)
+# Fast tests, no external dependencies
 ./gradlew test
 
-# Integration tests (requires bank simulator)
-docker run -d --name bank-simulator \
-  -p 2525:2525 -p 8080:8080 \
-  -v $(pwd)/imposters:/imposters \
-  bbyars/mountebank:2.8.1 \
-  --configfile /imposters/bank_simulator.ejs --allowInjection
+# Verify output
+# Tests: 36, Passed: 36, Failed: 0
 
-# Wait for bank simulator to be ready
-sleep 5
-curl -f http://localhost:2525/imposters || echo "Bank simulator failed to start"
+# View HTML report
+open build/reports/tests/test/index.html
+```
+
+### Step 2: Run Integration Tests
+
+```bash
+# Requires bank simulator running
+# (started in Step 1 of API Design)
 
 ./gradlew integrationTest
 
-# Functional tests (full stack)
+# Verify output
+# Tests: 9, Passed: 9, Failed: 0
+
+# View HTML report
+open build/reports/tests/integrationTest/index.html
+```
+
+### Step 3: Run Functional Tests
+
+```bash
+# Requires application running
+# (started in Step 1 of API Design)
+
 ./gradlew functionalTest
 
-# All tests with coverage
-./gradlew test integrationTest functionalTest jacocoFullReport
+# Verify output
+# Tests: 9, Passed: 9, Failed: 0
+
+# View HTML report
+open build/reports/tests/functionalTest/index.html
+```
+
+### Step 4: Check Coverage
+
+```bash
+# Generate combined coverage report
+./gradlew jacocoFullReport
 
 # View coverage report
 open build/reports/jacoco/jacocoFullReport/html/index.html
+
+# Check coverage percentage
+grep -o 'Total[^%]*%' build/reports/jacoco/jacocoFullReport/html/index.html | head -1
 ```
 
-### Demo: Test Isolation
+### Step 5: Run Security Scan
 
-```java
-// Unit test - fast, no Spring context
-@WebMvcTest(PaymentGatewayController.class)
-class PaymentGatewayControllerTest {
-    @MockBean private PaymentGatewayService service;
-    
-    @Test
-    void shouldReturnDedupeResponse() throws Exception {
-        when(service.processPayment(any(), any(), any()))
-            .thenReturn(mockResponse);
-        
-        mvc.perform(post("/api/v1/payments")...)
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("Authorized"));
-    }
-}
+```bash
+# OWASP Dependency Check
+./gradlew dependencyCheckAnalyze
 
-// Integration test - real Spring context
-@SpringBootTest(webEnvironment = RANDOM_PORT)
-class PaymentGatewayApiIntegrationTest {
-    @Test
-    void shouldProcessPaymentAndRetrieveById() {
-        ResponseEntity<PostPaymentResponse> post = 
-            restTemplate.postForEntity("/api/v1/payments", request, ...);
-        
-        UUID paymentId = post.getBody().getId();
-        
-        ResponseEntity<GetPaymentResponse> get = 
-            restTemplate.getForEntity("/api/v1/payments/" + paymentId, ...);
-        
-        assertThat(get.getBody().getId()).isEqualTo(paymentId);
-    }
-}
-```
-
-### Demo: CI/CD Pipeline
-
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      - name: Unit Tests
-        run: ./gradlew test
-      
-      - name: Integration Tests
-        run: ./gradlew integrationTest
-      
-      - name: Functional Tests
-        run: ./gradlew functionalTest
-      
-      - name: Coverage Report
-        run: ./gradlew jacocoFullReport
-      
-      - name: Upload Coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: build/reports/jacoco/
+# View report
+open build/reports/dependency-check-report.html
 ```
 
 ---
 
 ## 4. Packaging / Hosting
 
-### Demo: Docker Build
+### Concept: Docker + Kubernetes + Terraform
+
+Containerized deployment with infrastructure as code.
+
+### Step 1: Build Docker Image
 
 ```bash
-# Build Docker image
+# Build JAR
 ./gradlew bootJar
+
+# Build Docker image
 docker build -t payment-gateway:latest .
 
-# Run with Docker Compose
-docker-compose up
+# Verify image
+docker images | grep payment-gateway
+```
 
-# Verify
+### Step 2: Run with Docker Compose
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f payment-gateway
+
+# Test endpoint
 curl http://localhost:8090/actuator/health
 ```
 
-### Demo: Kubernetes Deployment
+### Step 3: Deploy to Kubernetes
 
 ```bash
 # Apply base configuration
@@ -327,189 +272,191 @@ kubectl apply -k k8s/base/
 # Apply dev overlay
 kubectl apply -k k8s/overlays/dev/
 
-# Check deployment
+# Verify deployment
 kubectl get pods -n payment-gateway
-kubectl logs -n payment-gateway -l app=payment-gateway
+kubectl get svc -n payment-gateway
+kubectl get ingress -n payment-gateway
+
+# View logs
+kubectl logs -n payment-gateway -l app=payment-gateway --tail=20
 
 # Port forward for testing
 kubectl port-forward -n payment-gateway svc/payment-gateway 8090:80
+
+# Test
+curl http://localhost:8090/actuator/health
 ```
 
-### Demo: Istio Traffic Management
+### Step 4: View Terraform Configuration
 
 ```bash
-# Check Istio routing
+# View AWS configuration
+open terraform/main.tf
+
+# View Aliyun configuration
+open terraform/aliyun/main.tf
+
+# View variables
+open terraform/variables.tf
+```
+
+### Step 5: Verify Istio Configuration
+
+```bash
+# Check Istio resources
 kubectl get virtualservice -n payment-gateway
+kubectl get destinationrule -n payment-gateway
+kubectl get gateway -n payment-gateway
 
-# Canary deployment: 10% traffic to new version
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: payment-gateway
-spec:
-  http:
-  - route:
-    - destination:
-        host: payment-gateway
-        subset: stable
-      weight: 90
-    - destination:
-        host: payment-gateway
-        subset: canary
-      weight: 10
-EOF
-```
-
-### Demo: Terraform Infrastructure
-
-```bash
-# Initialize Terraform
-cd terraform/aws
-terraform init
-
-# Preview changes
-terraform plan
-
-# Create infrastructure
-terraform apply
-
-# Get kubeconfig
-aws eks update-kubeconfig --region us-east-1 --name payment-gateway-cluster
-
-# Deploy application
-kubectl apply -k k8s/overlays/prod/
+# View details
+kubectl describe virtualservice payment-gateway -n payment-gateway
 ```
 
 ---
 
 ## 5. Technical Documentation
 
-### Demo: OpenAPI Auto-Generation
+### Concept: OpenAPI + Living Documentation
+
+Auto-generated API docs from code annotations.
+
+### Step 1: View OpenAPI Spec
 
 ```bash
-# Start application
-./gradlew bootRun
+# Start application (if not running)
+./gradlew bootRun &
 
-# Get OpenAPI spec
-curl http://localhost:8090/v3/api-docs | jq .
+# Get OpenAPI JSON
+curl -s http://localhost:8090/v3/api-docs | jq . | head -50
 
-# View Swagger UI
-open http://localhost:8090/swagger-ui.html
+# Save to file
+curl -s http://localhost:8090/v3/api-docs > openapi.json
 ```
 
-### Demo: API Examples in Code
+### Step 2: View Swagger UI
 
-```java
-@Operation(summary = "Process a new payment")
-@ApiResponse(responseCode = "200", description = "Payment authorized",
-    content = @Content(
-        schema = @Schema(implementation = PostPaymentResponse.class),
-        examples = @ExampleObject(name = "authorized", value = """
-            {
-              "code": "SUCCESS",
-              "status": "Authorized",
-              "id": "550e8400-e29b-41d4-a716-446655440000",
-              "cardNumberLastFour": 4241,
-              "amount": 100,
-              "currency": "USD"
-            }
-            """)))
-public ResponseEntity<PostPaymentResponse> processPayment(...) { }
+```bash
+# Open in browser
+open http://localhost:8090/swagger-ui.html
+
+# Or use curl
+curl -s http://localhost:8090/swagger-ui.html | grep -o '<title>[^<]*'
+```
+
+### Step 3: Check API Annotations in Code
+
+```bash
+# View OpenAPI annotations
+open src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayApi.java
+
+# Check for @Operation, @ApiResponse annotations
+grep -c "@Operation\|@ApiResponse" src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayApi.java
 ```
 
 ---
 
 ## 6. Observability
 
-### Demo: Metrics (Prometheus + Grafana)
+### Concept: Metrics + Logs + Traces
+
+Three pillars of observability with Prometheus, Grafana, Jaeger.
+
+### Step 1: Start Observability Stack
 
 ```bash
-# Start with observability stack
-docker-compose -f docker-compose.yml -f docker-compose.observability.yml up
+# Start application with monitoring
+docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 
-# Check Prometheus targets
-curl http://localhost:9090/api/v1/targets
+# Verify all services
+docker-compose ps
+```
 
-# Query payment latency
-open http://localhost:9090/graph?g0.expr=payment_process_seconds&g0.tab=0
+### Step 2: Check Prometheus Metrics
 
-# View Grafana dashboard
+```bash
+# View raw metrics
+curl -s http://localhost:8090/actuator/prometheus | grep payment
+
+# Expected output:
+# payment_process_seconds_count 42
+# payment_process_seconds_sum 1.234
+# payment_process_seconds_max 0.089
+
+# Query specific metric
+curl -s http://localhost:9090/api/v1/query?query=payment_process_seconds_count | jq .
+```
+
+### Step 3: View Grafana Dashboard
+
+```bash
+# Open Grafana
 open http://localhost:3000
-# Login: admin/admin
-# Dashboard: Payment Gateway
+
+# Login
+# Username: admin
+# Password: admin
+
+# Navigate to Dashboards > Payment Gateway
 ```
 
-### Demo: Distributed Tracing (Jaeger)
-
-```bash
-# Start with tracing
-docker-compose -f docker-compose.yml -f docker-compose.tracing.yml up
-
-# Make a payment request
-curl http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: trace-key" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}'
-
-# View trace in Jaeger
-open http://localhost:16686
-# Service: payment-gateway
-# Find traces for POST /api/v1/payments
-```
-
-### Demo: Health Checks
+### Step 4: View Health Checks
 
 ```bash
 # Overall health
-curl http://localhost:8090/actuator/health | jq .
-# {
-#   "status": "UP",
-#   "components": {
-#     "bankSimulator": { "status": "UP" },
-#     "diskSpace": { "status": "UP" },
-#     "ping": { "status": "UP" }
-#   }
-# }
+curl -s http://localhost:8090/actuator/health | jq .
 
-# Liveness probe (Kubernetes)
-curl http://localhost:8090/actuator/health/liveness
-# { "status": "UP" }
+# Liveness probe
+curl -s http://localhost:8090/actuator/health/liveness
 
-# Readiness probe (Kubernetes)
-curl http://localhost:8090/actuator/health/readiness
-# { "status": "UP" }
+# Readiness probe
+curl -s http://localhost:8090/actuator/health/readiness
+```
 
-# Prometheus metrics
-curl http://localhost:8090/actuator/prometheus | grep payment
-# payment_process_seconds_count 42
-# payment_process_seconds_sum 1.234
+### Step 5: View Distributed Traces
+
+```bash
+# Start with tracing enabled
+docker-compose -f docker-compose.yml -f docker-compose.tracing.yml up -d
+
+# Make a payment request
+curl -s http://localhost:8090/api/v1/payments \
+  -X POST \
+  -H "Merchant-Id: merchant-123" \
+  -H "Idempotency-Key: trace-demo" \
+  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}'
+
+# Open Jaeger UI
+open http://localhost:16686
+
+# Steps in Jaeger:
+# 1. Select Service: payment-gateway
+# 2. Click "Find Traces"
+# 3. Click on a trace to see full request flow
 ```
 
 ---
 
-## Interview Demo Script
+## Quick Interview Demo (5 minutes)
 
 ```bash
-# 1. Start everything
-docker-compose up
+# 1. Start everything (30s)
+docker-compose up -d
 
-# 2. Show API design
+# 2. Show API (30s)
 curl http://localhost:8090/api/v1/payments -X POST ...
 
-# 3. Show idempotency
+# 3. Show idempotency (30s)
 curl same request twice → same ID
 
-# 4. Show tests
+# 4. Show tests (1m)
 ./gradlew test integrationTest functionalTest
 
-# 5. Show metrics
+# 5. Show metrics (30s)
 curl http://localhost:8090/actuator/prometheus
 
-# 6. Show traces
+# 6. Show traces (1m)
 open http://localhost:16686
 
-# 7. Show K8s deployment
+# 7. Show K8s config (30s)
 kubectl apply -k k8s/overlays/dev/
 ```
