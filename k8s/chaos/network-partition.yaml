@@ -1,0 +1,22 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: payment-gateway-bank-partition
+  namespace: chaos-testing
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - payment-gateway-prod
+    labelSelectors:
+      app: payment-gateway
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: bank-simulator
+  duration: '2m'

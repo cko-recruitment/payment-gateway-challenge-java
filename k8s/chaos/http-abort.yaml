@@ -1,0 +1,19 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: payment-gateway-http-abort
+  namespace: chaos-testing
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - payment-gateway-prod
+    labelSelectors:
+      app: payment-gateway
+  target: Request
+  port: 8090
+  path: /api/v1/payments
+  abort: true
+  duration: '1m'
+  scheduler:
+    cron: '@every 30m'
