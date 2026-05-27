@@ -1,0 +1,37 @@
+# Circuit Breaker 熔断示例
+# 当后端服务故障时，快速失败，防止级联崩溃
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: bank-simulator-circuit-breaker
+  namespace: payment-gateway
+spec:
+  host: bank-simulator  # 目标服务
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100          # 最大连接数
+      http:
+        http1MaxPendingRequests: 50   # 最大等待请求
+        http2MaxRequests: 1000        # HTTP/2 最大请求
+        maxRequestsPerConnection: 10  # 每连接最大请求
+        maxRetries: 3                 # 最大重试
+    
+    outlierDetection:
+      # 熔断条件
+      consecutive5xxErrors: 5         # 连续 5 次 5xx 错误
+      interval: 30s                   # 检测间隔 30 秒
+      baseEjectionTime: 30s           # 熔断 30 秒
+      maxEjectionPercent: 50          # 最多熔断 50% 实例
+      
+    # 连接超时
+    connectionPool:
+      tcp:
+        connectTimeout: 100ms         # 连接超时 100ms
+---
+# 效果说明：
+# 1. 正常时：请求正常转发到 bank-simulator
+# 2. 故障时：连续 5 次 5xx 后，该实例被标记为不健康
+# 3. 熔断时：新请求不再发送到故障实例，直接返回错误
+# 4. 恢复时：30 秒后尝试恢复，健康则重新加入

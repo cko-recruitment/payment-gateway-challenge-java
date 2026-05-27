@@ -1,0 +1,57 @@
+# Distributed Tracing 分布式追踪示例
+# 追踪请求在全链路的流转
+
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: payment-tracing
+  namespace: payment-gateway
+spec:
+  tracing:
+    - providers:
+        - name: jaeger  # 或 zipkin, otel-collector
+      randomSamplingPercentage: 100.0  # 100% 采样（生产用 1-10%）
+      customTags:
+        environment:
+          literal:
+            value: "production"
+        service:
+          fromCanonicalName: true
+---
+# 追踪数据流：
+# 
+# User Request
+#     │
+#     ▼
+# ┌─────────────┐  Trace ID: abc-123
+# │  Ingress    │  Span: ingress (0ms)
+# │  Gateway    │
+# └──────┬──────┘
+#        │
+#        ▼
+# ┌─────────────┐  Span: payment-service (5ms)
+# │  Payment    │  Parent: ingress
+# │  Service    │
+# └──────┬──────┘
+#        │
+#        ├──► ┌─────────────┐  Span: bank-call (50ms)
+#        │    │  Bank       │  Parent: payment-service
+#        │    │  Simulator  │
+#        │    └─────────────┘
+#        │
+#        └──► ┌─────────────┐  Span: redis-cache (2ms)
+#             │  Redis      │  Parent: payment-service
+#             │  Cache      │
+#             └─────────────┘
+#
+# Jaeger UI 展示：
+# ┌─────────────────────────────────────────┐
+# │ Trace: abc-123                          │
+# │ Total: 55ms                             │
+# │                                         │
+# │ [ingress]━━━━━━[payment]━━━━━━[bank]   │
+# │    0ms           5ms          50ms      │
+# │                      \                  │
+# │                       [redis]           │
+# │                        2ms              │
+# └─────────────────────────────────────────┘
