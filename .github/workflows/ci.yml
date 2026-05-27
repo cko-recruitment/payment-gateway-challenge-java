@@ -151,7 +151,7 @@ jobs:
           import os
           
           def parse_coverage(xml_path):
-              """Parse JaCoCo XML and return (overall_pct, packages_list)"""
+              """Parse JaCoCo XML and return dict of package_name -> coverage_pct"""
               try:
                   tree = ET.parse(xml_path)
                   root = tree.getroot()
@@ -166,8 +166,8 @@ jobs:
                   
                   overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
                   
-                  # Package level
-                  packages = []
+                  # Package level - return as dict for easy comparison
+                  packages = {}
                   for pkg in root.findall('package'):
                       name = pkg.get('name', '').replace('/', '.')
                       missed = 0
@@ -178,34 +178,20 @@ jobs:
                               covered += int(counter.get('covered', 0))
                       if missed + covered > 0:
                           pct = covered / (missed + covered) * 100
-                          packages.append((name, pct, missed + covered))
+                          packages[name] = pct
                   
-                  packages.sort(key=lambda x: x[1])
                   return overall, packages
               except Exception as e:
                   print(f"Error parsing {xml_path}: {e}")
-                  return 0.0, []
+                  return 0.0, {}
           
-          def format_coverage_table(packages, title):
-              """Format package coverage as markdown table"""
-              lines = []
-              lines.append(f"### {title}")
-              lines.append("")
-              lines.append("| Package | Coverage | Lines |")
-              lines.append("|---------|----------|-------|")
-              
-              if not packages:
-                  lines.append("| *No coverage data* | - | - |")
-                  return lines
-              
-              for name, pct, total in packages[:20]:
-                  status = "🟢" if pct >= 70 else "🟡" if pct >= 50 else "🔴"
-                  lines.append(f"| {name} | {status} {pct:.1f}% | {total} |")
-              
-              if len(packages) > 20:
-                  lines.append(f"| ... ({len(packages) - 20} more) | | |")
-              
-              return lines
+          def get_status_emoji(pct):
+              if pct >= 70:
+                  return "🟢"
+              elif pct >= 50:
+                  return "🟡"
+              else:
+                  return "🔴"
           
           # Parse all coverage reports
           unit_overall, unit_packages = parse_coverage('build/reports/jacoco/test/jacocoTestReport.xml')
@@ -213,29 +199,57 @@ jobs:
           functional_overall, functional_packages = parse_coverage('build/reports/jacoco/jacocoFunctionalReport/jacocoFunctionalReport.xml')
           full_overall, full_packages = parse_coverage('build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml')
           
+          # Get all unique package names
+          all_packages = sorted(set(unit_packages.keys()) | set(integration_packages.keys()) | set(functional_packages.keys()))
+          
           # Generate markdown
           lines = []
           lines.append("## 📊 Coverage Report")
           lines.append("")
-          lines.append("| Test Scope | Coverage |")
-          lines.append("|------------|----------|")
-          lines.append(f"| Unit Tests | {unit_overall:.1f}% |")
-          lines.append(f"| Integration Tests | {integration_overall:.1f}% |")
-          lines.append(f"| Functional Tests | {functional_overall:.1f}% |")
-          lines.append(f"| **Combined (All)** | **{full_overall:.1f}%** |")
+          lines.append("| Test Scope | Coverage | What It Tests |")
+          lines.append("|------------|----------|---------------|")
+          lines.append(f"| Unit Tests | {get_status_emoji(unit_overall)} {unit_overall:.1f}% | Service, Aspect, Repository (with mocks) |")
+          lines.append(f"| Integration Tests | {get_status_emoji(integration_overall)} {integration_overall:.1f}% | Component interaction, real HTTP calls |")
+          lines.append(f"| Functional Tests | {get_status_emoji(functional_overall)} {functional_overall:.1f}% | End-to-end HTTP flow |")
+          lines.append(f"| **Combined** | **{get_status_emoji(full_overall)} {full_overall:.1f}%** | **All layers** |")
           lines.append("")
           
-          # Unit test package detail
-          lines.extend(format_coverage_table(unit_packages, f"📋 Unit Test Package Detail ({unit_overall:.1f}%)"))
+          # Comparison table: show coverage by test type per package
+          lines.append("### 📋 Coverage by Test Type (per package)")
+          lines.append("")
+          lines.append("| Package | Unit | Integration | Functional | Combined |")
+          lines.append("|---------|------|-------------|------------|----------|")
+          
+          for pkg in all_packages:
+              unit_pct = unit_packages.get(pkg, 0)
+              int_pct = integration_packages.get(pkg, 0)
+              func_pct = functional_packages.get(pkg, 0)
+              full_pct = full_packages.get(pkg, 0)
+              
+              # Show delta if higher-level tests improved coverage
+              unit_str = f"{unit_pct:.0f}%" if unit_pct > 0 else "-"
+              int_str = f"+{int_pct - unit_pct:.0f}%" if int_pct > unit_pct else (f"{int_pct:.0f}%" if int_pct > 0 else "-")
+              func_str = f"+{func_pct - max(unit_pct, int_pct):.0f}%" if func_pct > max(unit_pct, int_pct) else (f"{func_pct:.0f}%" if func_pct > 0 else "-")
+              full_str = f"{full_pct:.0f}%"
+              
+              lines.append(f"| {pkg} | {unit_str} | {int_str} | {func_str} | {get_status_emoji(full_pct)} {full_str} |")
+          
+          lines.append("")
+          lines.append("**Legend:** `+X%` = additional coverage from this test type")
           lines.append("")
           
-          # Integration test package detail
-          lines.extend(format_coverage_table(integration_packages, f"📋 Integration Test Package Detail ({integration_overall:.1f}%)"))
-          lines.append("")
+          # Show which packages are uniquely covered by each test type
+          unit_only = [p for p in all_packages if p in unit_packages and p not in integration_packages and p not in functional_packages]
+          int_better = [p for p in all_packages if p in integration_packages and (p not in unit_packages or integration_packages[p] > unit_packages.get(p, 0))]
+          func_better = [p for p in all_packages if p in functional_packages and (p not in unit_packages or functional_packages[p] > unit_packages.get(p, 0))]
           
-          # Functional test package detail
-          lines.extend(format_coverage_table(functional_packages, f"📋 Functional Test Package Detail ({functional_overall:.1f}%)"))
-          lines.append("")
+          if int_better:
+              lines.append(f"**🎯 Integration Tests uniquely cover:** {', '.join(int_better[:5])}{'...' if len(int_better) > 5 else ''}")
+              lines.append("")
+          
+          if func_better:
+              lines.append(f"**🎯 Functional Tests uniquely cover:** {', '.join(func_better[:5])}{'...' if len(func_better) > 5 else ''}")
+              lines.append("")
           
           # Run info
           run_id = os.environ.get('GITHUB_RUN_ID', 'unknown')
