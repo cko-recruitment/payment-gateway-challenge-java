@@ -106,6 +106,8 @@ jobs:
           
           packages.sort(key=lambda x: x[1])
           
+          import os
+          
           # Generate markdown
           lines = []
           lines.append(f"## 📊 Coverage Report: {overall:.1f}%")
@@ -119,6 +121,12 @@ jobs:
           
           if len(packages) > 20:
               lines.append(f"| ... ({len(packages) - 20} more) | | |")
+          
+          # Add run info
+          run_id = os.environ.get('GITHUB_RUN_ID', 'unknown')
+          run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"
+          lines.append("")
+          lines.append(f"*Report updated by [CI Run #{run_id}]({run_url})*")
           
           with open('coverage-comment.md', 'w') as f:
               f.write('\n'.join(lines))
@@ -134,6 +142,7 @@ jobs:
         with:
           header: coverage
           path: coverage-comment.md
+          recreate: true
 
       - name: Fail if Coverage Low
         if: github.event_name == 'pull_request' && steps.coverage.outputs.overall < 70
