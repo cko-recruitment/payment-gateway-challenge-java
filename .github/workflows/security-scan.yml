@@ -202,7 +202,13 @@ jobs:
             
             # Extract HIGH vulnerability details for PR comment
             if [ "$HIGH" != "0" ]; then
-              jq -r '.site[0].alerts[]? | select(.riskcode == "3") | "| \(.name) | \(.desc | gsub("<[^>]+>"; "") | split("\n")[0]) |"' zap-api-report.json > zap_high_details.txt 2>/dev/null || echo "" > zap_high_details.txt
+              jq -r '.site[0].alerts[]? | select(.riskcode == "3") | 
+                "**" + .name + "**  \n" +
+                "- **Risk**: 🔴 High  \n" +
+                "- **Description**: " + (.desc | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
+                "- **Solution**: " + (.solution | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
+                "---  \n"
+              ' zap-api-report.json > zap_high_details.txt 2>/dev/null || echo "" > zap_high_details.txt
             else
               echo "" > zap_high_details.txt
             fi
@@ -255,8 +261,6 @@ jobs:
 
             ${{ env.ZAP_HIGH != '0' && '### ❌ HIGH Vulnerabilities Found
             
-            | Vulnerability | Description |
-            |---------------|-------------|
             ' || '' }}${{ env.ZAP_HIGH_DETAILS }}${{ env.ZAP_HIGH != '0' && '
             
             **Action Required**: Please review and fix these vulnerabilities before merging.' || '' }}
