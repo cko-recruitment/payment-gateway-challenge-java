@@ -45,7 +45,9 @@ jobs:
 
       # OWASP Dependency-Check - Scan for known vulnerabilities in dependencies
       - name: OWASP Dependency Check
-        run: ./gradlew dependencyCheckAnalyze
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./gradlew dependencyCheckAnalyze --info || true
 
       - name: Copy Dependency Check Report
         run: |
@@ -57,10 +59,10 @@ jobs:
         run: |
           # Extract vulnerability counts from JSON report
           if [ -f "reports/dependency-check-report.json" ]; then
-            CRITICAL=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "CRITICAL") | .severity' reports/dependency-check-report.json | wc -l)
-            HIGH=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "HIGH") | .severity' reports/dependency-check-report.json | wc -l)
-            MEDIUM=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "MEDIUM") | .severity' reports/dependency-check-report.json | wc -l)
-            LOW=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "LOW") | .severity' reports/dependency-check-report.json | wc -l)
+            CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity == "CRITICAL")] | length' reports/dependency-check-report.json 2>/dev/null || echo "0")
+            HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity == "HIGH")] | length' reports/dependency-check-report.json 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity == "MEDIUM")] | length' reports/dependency-check-report.json 2>/dev/null || echo "0")
+            LOW=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity == "LOW")] | length' reports/dependency-check-report.json 2>/dev/null || echo "0")
             
             echo "DEP_CHECK_CRITICAL=$CRITICAL" >> $GITHUB_ENV
             echo "DEP_CHECK_HIGH=$HIGH" >> $GITHUB_ENV

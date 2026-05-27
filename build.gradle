@@ -8,6 +8,21 @@ plugins {
     id 'org.owasp.dependencycheck' version '9.0.9'
 }
 
+// OWASP Dependency-Check configuration
+dependencyCheck {
+    nvd {
+        apiKey = System.getenv('NVD_API_KEY') ?: ''
+    }
+    // Suppress false positives and reduce noise
+    suppressionFiles = ['dependency-check-suppressions.xml']
+    // Skip test dependencies
+    skipConfigurations = ['testImplementation', 'integrationTestImplementation', 'functionalTestImplementation']
+    // Output formats
+    formats = ['HTML', 'JSON']
+    // Fail on CVSS 7+ (HIGH and CRITICAL)
+    failBuildOnCVSS = 7.0
+}
+
 group = 'com.checkout'
 version = '0.0.1-SNAPSHOT'
 

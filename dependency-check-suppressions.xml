@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- Example suppression - add real ones as needed -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+            False positive for Spring Boot - not applicable to our usage
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework/boot/.*$</packageUrl>
+        <cve>CVE-202X-XXXXX</cve>
+    </suppress>
+    -->
+</suppressions>
