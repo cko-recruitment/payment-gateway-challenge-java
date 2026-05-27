@@ -1,0 +1,56 @@
+name: K8s Manifest Validation
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'k8s/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'k8s/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Validate Kustomize Build
+        run: |
+          echo "=== Dev Overlay ==="
+          kubectl kustomize k8s/overlays/dev | head -50
+          
+          echo ""
+          echo "=== Prod Overlay ==="
+          kubectl kustomize k8s/overlays/prod | head -50
+
+      - name: Validate YAML Syntax
+        run: |
+          kubectl kustomize k8s/overlays/dev > /tmp/dev.yaml
+          kubectl kustomize k8s/overlays/prod > /tmp/prod.yaml
+          echo "Dev manifest size: $(wc -l < /tmp/dev.yaml) lines"
+          echo "Prod manifest size: $(wc -l < /tmp/prod.yaml) lines"
+
+      - name: Check Required Fields
+        run: |
+          # Check dev
+          kubectl kustomize k8s/overlays/dev | grep -q "replicas: 1" || (echo "Dev replicas missing" && exit 1)
+          kubectl kustomize k8s/overlays/dev | grep -q "memory: 256Mi" || (echo "Dev memory limit missing" && exit 1)
+          
+          # Check prod
+          kubectl kustomize k8s/overlays/prod | grep -q "replicas: 3" || (echo "Prod replicas missing" && exit 1)
+          kubectl kustomize k8s/overlays/prod | grep -q "memory: 1Gi" || (echo "Prod memory limit missing" && exit 1)
+          
+          echo "All required fields present!"
+
+      - name: Setup kubeval
+        uses: lra/setup-kubeval@v1
+
+      - name: Validate with kubeval
+        run: |
+          kubectl kustomize k8s/overlays/dev | kubeval --strict
+          kubectl kustomize k8s/overlays/prod | kubeval --strict
