@@ -18,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Integration test: verifies the deployed API endpoints are reachable
@@ -25,6 +26,7 @@ import org.springframework.http.ResponseEntity;
  * Uses random port to avoid conflicts with other tests.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = "bank.url=http://localhost:8080/payments")
 class PaymentGatewayApiIntegrationTest {
 
   @LocalServerPort

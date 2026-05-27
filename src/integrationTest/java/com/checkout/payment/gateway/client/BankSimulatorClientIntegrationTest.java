@@ -9,9 +9,11 @@ import java.time.YearMonth;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.HttpServerErrorException;
 
 @SpringBootTest
+@TestPropertySource(properties = "bank.url=http://localhost:8080/payments")
 class BankSimulatorClientIntegrationTest {
 
   @Autowired
