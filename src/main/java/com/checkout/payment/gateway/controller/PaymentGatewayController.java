@@ -1,15 +1,11 @@
 package com.checkout.payment.gateway.controller;
 
-import com.checkout.payment.gateway.enums.GatewayCode;
-import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.exception.BankProcessingException;
 import com.checkout.payment.gateway.model.GetPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.security.SecureLogger;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -83,27 +79,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
 
     return new ResponseEntity<>(response, HttpStatus.OK);
-  }
-
-  private PostPaymentResponse bankErrorResponse(BankProcessingException ex) {
-    PostPaymentResponse response = new PostPaymentResponse();
-    response.setStatus(PaymentStatus.DECLINED);
-    response.addLink(new Link("self", "/api/v1/payments", "POST"));
-
-    if (ex.getBankStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
-      response.setDescription("Bank service temporarily unavailable");
-      response.setGatewayCode(GatewayCode.BANK_UNAVAILABLE);
-    } else if (ex.getBankStatusCode() == HttpStatus.BAD_REQUEST) {
-      response.setDescription("Bank validation error");
-      response.setGatewayCode(GatewayCode.BANK_VALIDATION_ERROR);
-    } else {
-      response.setDescription(ex.getMessage());
-      response.setGatewayCode(GatewayCode.BANK_ERROR);
-    }
-    Instant now = Instant.now();
-    response.setCreatedAt(now);
-    response.setUpdatedAt(now);
-    return response;
   }
 
 }
