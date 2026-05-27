@@ -165,9 +165,13 @@ jobs:
 
       - name: Run ZAP API Scan
         run: |
+          # Create reports directory with proper permissions
+          mkdir -p zap-reports
+          chmod 777 zap-reports
+          
           # Run ZAP in API scan mode using OpenAPI spec
           docker run --rm \
-            -v $(pwd):/zap/wrk \
+            -v $(pwd)/zap-reports:/zap/wrk \
             --network=host \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-api-scan.py \
@@ -175,8 +179,11 @@ jobs:
             -f openapi \
             -r zap-api-report.html \
             -J zap-api-report.json \
-            -c /zap/wrk/.zap/rules.tsv \
+            -c /zap/wrk/../.zap/rules.tsv \
             -a
+          
+          # Copy reports back to workspace
+          cp zap-reports/zap-api-report.* . || true
 
       - name: Parse ZAP Results
         if: always()
