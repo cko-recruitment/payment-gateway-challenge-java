@@ -10,7 +10,6 @@ public class GetPaymentResponse extends PostPaymentResponse {
     GetPaymentResponse getResponse = new GetPaymentResponse();
     getResponse.setId(postResponse.getId());
     getResponse.setStatus(postResponse.getStatus());
-    // PII fields intentionally omitted for security - only available in POST response
     getResponse.setCurrency(postResponse.getCurrency());
     getResponse.setAmount(postResponse.getAmount());
     getResponse.setCode(postResponse.getCode());
