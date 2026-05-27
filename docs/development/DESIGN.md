@@ -234,6 +234,71 @@ curl -s http://localhost:8090/api/v1/payments/idempotency/key-1 \
 
 Clean separation of concerns using interfaces and aspects.
 
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         HTTP Layer                           │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  PaymentGatewayController                           │   │
+│  │  - @RestController                                  │   │
+│  │  - Thin: delegates all logic to Service            │   │
+│  │  - Adds HATEOAS links (request-specific)           │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Business Layer                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  PaymentGatewayService                              │   │
+│  │  - Validation (card, expiry, currency, CVV)        │   │
+│  │  - Idempotency cache lookup                        │   │
+│  │  - Concurrent lock per dedupe key                  │   │
+│  │  - Bank client call                                │   │
+│  │  - Save result to cache                            │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  AOP Aspects (cross-cutting concerns)               │   │
+│  │  - RateLimitAspect: @Around controller methods     │   │
+│  │  - PaymentMetricsAspect: @Around service methods   │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Client Layer                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  BankClient (interface)                             │   │
+│  │  └─ BankSimulatorClient (implementation)            │   │
+│  │     - RestTemplate call to bank simulator           │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Data Layer                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  IdempotencyRepository (interface)                  │   │
+│  │  └─ InMemoryIdempotencyRepository (implementation)  │   │
+│  │     - ConcurrentHashMap<String, PostPaymentResponse>│   │
+│  │     - keyStore: dedupeKey → response               │   │
+│  │     - idStore: paymentId → response                │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+| Principle | Implementation |
+|-----------|---------------|
+| **S**ingle Responsibility | Controller = HTTP, Service = Business, Repository = Storage |
+| **O**pen/Closed | AOP aspects add behavior without modifying business code |
+| **L**iskov Substitution | BankClient interface → BankSimulatorClient or real bank client |
+| **I**nterface Segregation | IdempotencyRepository has only 3 methods |
+| **D**ependency Inversion | Service depends on BankClient interface, not concrete class |
+
 ### Step 1: View Layered Architecture
 
 ```bash
