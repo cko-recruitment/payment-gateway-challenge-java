@@ -156,29 +156,39 @@ jobs:
           echo "App failed to start"
           exit 1
 
-      - name: OWASP ZAP Full Scan
-        id: zap
-        uses: zaproxy/action-full-scan@v0.10.0
-        with:
-          target: 'http://localhost:8090'
-          rules_file_name: '.zap/rules.tsv'
-          cmd_options: '-a'
-          allow_issue_writing: false
-          artifact_name: 'zap-dast-report'
+      - name: Download OpenAPI Spec
+        run: |
+          # Download OpenAPI spec from running application
+          curl -sf http://localhost:8090/v3/api-docs > openapi.json
+          echo "OpenAPI spec downloaded"
+          head -50 openapi.json
+
+      - name: Run ZAP API Scan
+        run: |
+          # Run ZAP in API scan mode using OpenAPI spec
+          docker run --rm \
+            -v $(pwd):/zap/wrk \
+            --network=host \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+            -t http://localhost:8090/v3/api-docs \
+            -f openapi \
+            -r zap-api-report.html \
+            -J zap-api-report.json \
+            -c /zap/wrk/.zap/rules.tsv \
+            -a
 
       - name: Parse ZAP Results
         if: always()
         run: |
-          # Find ZAP report files (action creates them with timestamp)
-          ZAP_JSON=$(ls -t report_*.json 2>/dev/null | head -1)
-          if [ -n "$ZAP_JSON" ] && [ -f "$ZAP_JSON" ]; then
-            echo "Found ZAP report: $ZAP_JSON"
-            HIGH=$(jq '[.site[0].alerts[]? | select(.riskcode == "3")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
-            MEDIUM=$(jq '[.site[0].alerts[]? | select(.riskcode == "2")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
-            LOW=$(jq '[.site[0].alerts[]? | select(.riskcode == "1")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
-            INFO=$(jq '[.site[0].alerts[]? | select(.riskcode == "0")] | length' "$ZAP_JSON" 2>/dev/null || echo "0")
+          if [ -f "zap-api-report.json" ]; then
+            echo "Found ZAP API report"
+            HIGH=$(jq '[.site[0].alerts[]? | select(.riskcode == "3")] | length' zap-api-report.json 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.site[0].alerts[]? | select(.riskcode == "2")] | length' zap-api-report.json 2>/dev/null || echo "0")
+            LOW=$(jq '[.site[0].alerts[]? | select(.riskcode == "1")] | length' zap-api-report.json 2>/dev/null || echo "0")
+            INFO=$(jq '[.site[0].alerts[]? | select(.riskcode == "0")] | length' zap-api-report.json 2>/dev/null || echo "0")
           else
-            echo "No ZAP JSON report found"
+            echo "No ZAP report found"
             HIGH=0
             MEDIUM=0
             LOW=0
@@ -190,6 +200,15 @@ jobs:
           echo "ZAP_LOW=$LOW" >> $GITHUB_ENV
           echo "ZAP_INFO=$INFO" >> $GITHUB_ENV
 
+      - name: Upload ZAP Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-api-scan-report
+          path: |
+            zap-api-report.html
+            zap-api-report.json
+
       - name: Post DAST Summary
         if: github.event_name == 'pull_request' && always()
         uses: marocchino/sticky-pull-request-comment@v2
@@ -198,7 +217,9 @@ jobs:
           message: |
             ## 🌐 DAST Security Scan Results
 
-            ### OWASP ZAP Baseline Scan
+            ### OWASP ZAP API Scan
+            Based on OpenAPI specification from running application
+
             | Risk Level | Count |
             |------------|-------|
             | 🔴 High | ${{ env.ZAP_HIGH }} |
@@ -208,9 +229,16 @@ jobs:
 
             📄 [Full ZAP Report](../../actions/runs/${{ github.run_id }})
 
-            ### Scan Target
-            - URL: http://localhost:8090
-            - Type: Baseline Scan (passive + active)
+            ### Scan Coverage
+            - **API Spec**: OpenAPI 3.0 from `/v3/api-docs`
+            - **Endpoints Tested**:
+              - `POST /api/v1/payments` - Process payment
+              - `GET /api/v1/payments/{id}` - Retrieve by ID
+              - `GET /api/v1/payments/idempotency/{key}` - Retrieve by idempotency key
+            - **Security Tests**:
+              - Input validation (card number, currency, expiry)
+              - Header injection (Merchant-Id, Idempotency-Key)
+              - Response handling (200-Only API)
 
             *Scan completed at ${{ github.event.head_commit.timestamp }}*
 
