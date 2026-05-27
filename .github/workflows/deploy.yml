@@ -1,6 +1,8 @@
 name: Deploy to Production
 
 # 手动触发部署（演示用）
+# 注意：当前 workflow 在 feature/cloudnative 分支
+# 合并到 main 后才能在 Actions 页面看到
 on:
   workflow_dispatch:
     inputs:
@@ -48,29 +50,53 @@ jobs:
         with:
           terraform_version: "1.7.0"
 
-      # 阿里云部署
-      - name: Deploy to Aliyun
-        if: inputs.cloud_provider == 'aliyun'
+      # Terraform Plan（预览变更）
+      - name: Terraform Init and Plan
         env:
           ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
           ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
-        run: |
-          cd terraform/aliyun
-          terraform init
-          terraform plan
-          terraform apply -auto-approve
-
-      # AWS 部署
-      - name: Deploy to AWS
-        if: inputs.cloud_provider == 'aws'
-        env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          cd terraform/aws
+          cd terraform/${{ inputs.cloud_provider }}
           terraform init
-          terraform plan
-          terraform apply -auto-approve
+          terraform plan -out=tfplan
+          echo "### Terraform Plan" >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color tfplan >> $GITHUB_STEP_SUMMARY
+
+      # 生产环境人工审批
+      - name: Wait for Approval (Production)
+        if: inputs.environment == 'prod'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: james-yz-xie
+          minimum-approvals: 1
+          issue-title: "Deploy to Production"
+          issue-body: |
+            ## ⚠️ Production Deployment Approval Required
+            
+            | Item | Value |
+            |------|-------|
+            | Cloud Provider | ${{ inputs.cloud_provider }} |
+            | Environment | ${{ inputs.environment }} |
+            | Commit | ${{ github.sha }} |
+            
+            Please review the Terraform plan above before approving.
+            
+            - [ ] I have reviewed the infrastructure changes
+            - [ ] I approve this deployment
+
+      # Terraform Apply（执行变更）
+      - name: Terraform Apply
+        env:
+          ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+          ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          cd terraform/${{ inputs.cloud_provider }}
+          terraform apply -auto-approve tfplan
 
       # 构建 Docker 镜像
       - name: Build Docker Image
