@@ -216,8 +216,11 @@ open http://localhost:3000
 
 **3. Run load test**
 ```bash
-# k6 joins the existing network
+# Option 1: Docker (no need to install k6)
 docker-compose -f docker-compose.loadtest.yml run k6
+
+# Option 2: Local k6 (if installed)
+k6 run load-tests/load-test.js
 ```
 
 **4. Watch metrics in real-time**
