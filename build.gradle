@@ -37,6 +37,10 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+    
+    // Redis for distributed session
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.session:spring-session-data-redis'
     // Rate Limit & Metrics — AOP support
     implementation 'org.springframework.boot:spring-boot-starter-aop'
     // Observability — Actuator health checks and Prometheus metrics
