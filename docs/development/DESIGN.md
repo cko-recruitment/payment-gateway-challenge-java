@@ -201,15 +201,31 @@ Open any PR → CI posts combined test + coverage report as comment:
 
 ### Load Test
 
+**1. Start app + observability stack**
 ```bash
-# Run with k6 (requires app running)
-docker-compose -f docker-compose.yml -f docker-compose.loadtest.yml up k6
-
-# Or run locally with k6 installed
-k6 run load-tests/load-test.js
+docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 ```
 
-**What it tests:**
+**2. Open Grafana**
+```bash
+open http://localhost:3000
+# Login: admin / admin
+# Dashboard: Payment Gateway
+```
+
+**3. Run load test**
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.loadtest.yml up k6
+```
+
+**4. Watch metrics in real-time**
+- Request rate (RPS)
+- Response latency (p50/p95/p99)
+- Error rate
+- Rate limit hits
+- JVM memory / GC
+
+**Load profile:**
 | Stage | Duration | Users | Purpose |
 |-------|----------|-------|---------|
 | Ramp up | 30s | 10 | Warm up |
