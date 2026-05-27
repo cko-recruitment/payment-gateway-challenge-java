@@ -156,14 +156,15 @@ jobs:
           echo "App failed to start"
           exit 1
 
-      - name: OWASP ZAP Baseline Scan
+      - name: OWASP ZAP Full Scan
         id: zap
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-full-scan@v0.10.0
         with:
           target: 'http://localhost:8090'
           rules_file_name: '.zap/rules.tsv'
           cmd_options: '-a'
           allow_issue_writing: false
+          artifact_name: 'zap-dast-report'
 
       - name: Parse ZAP Results
         if: always()
