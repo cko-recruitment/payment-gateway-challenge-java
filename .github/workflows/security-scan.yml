@@ -199,18 +199,32 @@ jobs:
             MEDIUM=$(jq '[.site[0].alerts[]? | select(.riskcode == "2")] | length' zap-api-report.json 2>/dev/null || echo "0")
             LOW=$(jq '[.site[0].alerts[]? | select(.riskcode == "1")] | length' zap-api-report.json 2>/dev/null || echo "0")
             INFO=$(jq '[.site[0].alerts[]? | select(.riskcode == "0")] | length' zap-api-report.json 2>/dev/null || echo "0")
+            
+            # Extract HIGH vulnerability details for PR comment
+            if [ "$HIGH" != "0" ]; then
+              jq -r '.site[0].alerts[]? | select(.riskcode == "3") | "| \(.name) | \(.desc | gsub("<[^>]+>"; "") | split("\n")[0]) |"' zap-api-report.json > zap_high_details.txt 2>/dev/null || echo "" > zap_high_details.txt
+            else
+              echo "" > zap_high_details.txt
+            fi
           else
             echo "No ZAP report found"
             HIGH=0
             MEDIUM=0
             LOW=0
             INFO=0
+            echo "" > zap_high_details.txt
           fi
           
           echo "ZAP_HIGH=$HIGH" >> $GITHUB_ENV
           echo "ZAP_MEDIUM=$MEDIUM" >> $GITHUB_ENV
           echo "ZAP_LOW=$LOW" >> $GITHUB_ENV
           echo "ZAP_INFO=$INFO" >> $GITHUB_ENV
+          
+          # Save details to env for PR comment
+          ZAP_HIGH_DETAILS=$(cat zap_high_details.txt)
+          echo "ZAP_HIGH_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$ZAP_HIGH_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
@@ -238,6 +252,14 @@ jobs:
             | 🟠 Medium | ${{ env.ZAP_MEDIUM }} |
             | 🟡 Low | ${{ env.ZAP_LOW }} |
             | 🔵 Informational | ${{ env.ZAP_INFO }} |
+
+            ${{ env.ZAP_HIGH != '0' && '### ❌ HIGH Vulnerabilities Found
+            
+            | Vulnerability | Description |
+            |---------------|-------------|
+            ' || '' }}${{ env.ZAP_HIGH_DETAILS }}${{ env.ZAP_HIGH != '0' && '
+            
+            **Action Required**: Please review and fix these vulnerabilities before merging.' || '' }}
 
             📄 [Full ZAP Report](../../actions/runs/${{ github.run_id }})
 
