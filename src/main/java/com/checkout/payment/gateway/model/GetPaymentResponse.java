@@ -15,7 +15,8 @@ public class GetPaymentResponse extends PostPaymentResponse {
     getResponse.setCode(postResponse.getCode());
     getResponse.setDescription(postResponse.getDescription());
     getResponse.setAction(postResponse.getAction());
-    getResponse.setLinks(postResponse.getLinks());
+    getResponse.setCreatedAt(postResponse.getCreatedAt());
+    getResponse.setUpdatedAt(postResponse.getUpdatedAt());
     return getResponse;
   }
 

@@ -38,11 +38,7 @@ public interface PaymentGatewayApi {
                 "expiryMonth": 12,
                 "expiryYear": 2027,
                 "currency": "USD",
-                "amount": 100,
-                "links": [
-                  {"rel": "self", "href": "/api/v1/payments/idempotency/dedupe-key-1", "method": "GET"},
-                  {"rel": "payment", "href": "/api/v1/payments/7d474a2e-4748-463c-ad64-670045457a6e", "method": "GET"}
-                ]
+                "amount": 100
               }
               """)))
   @ApiResponse(responseCode = "200", description = "Payment not found",
@@ -89,11 +85,7 @@ public interface PaymentGatewayApi {
                 "expiryMonth": 12,
                 "expiryYear": 2027,
                 "currency": "USD",
-                "amount": 100,
-                "links": [
-                  {"rel": "self", "href": "/api/v1/payments/7d474a2e-4748-463c-ad64-670045457a6e", "method": "GET"},
-                  {"rel": "idempotency", "href": "/api/v1/payments/idempotency/dedupe-key-1", "method": "GET"}
-                ]
+                "amount": 100
               }
               """)))
   @ApiResponse(responseCode = "200", description = "Payment declined by bank",
@@ -109,10 +101,7 @@ public interface PaymentGatewayApi {
                 "expiryMonth": 12,
                 "expiryYear": 2027,
                 "currency": "GBP",
-                "amount": 2500,
-                "links": [
-                  {"rel": "self", "href": "/api/v1/payments", "method": "POST"}
-                ]
+                "amount": 2500
               }
               """)))
   @ApiResponse(responseCode = "200", description = "Request validation failed",
@@ -123,10 +112,7 @@ public interface PaymentGatewayApi {
                 "description": "Card number must only contain numeric characters; Invalid ISO 4217 currency code",
                 "action": "fix_request",
                 "id": null,
-                "status": "Rejected",
-                "links": [
-                  {"rel": "self", "href": "/api/v1/payments", "method": "POST"}
-                ]
+                "status": "Rejected"
               }
               """)))
   ResponseEntity<PostPaymentResponse> processPayment(

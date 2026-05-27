@@ -17,9 +17,6 @@ public class BasePaymentResponse {
   @Schema(description = "Recommended client action: none, retry, fix_request, contact_support", example = "none")
   private String action;
 
-  @Schema(description = "HATEOAS links for next actions")
-  private List<Link> links;
-
   public String getCode() {
     return code;
   }
@@ -42,21 +39,6 @@ public class BasePaymentResponse {
 
   public void setAction(String action) {
     this.action = action;
-  }
-
-  public List<Link> getLinks() {
-    return links;
-  }
-
-  public void setLinks(List<Link> links) {
-    this.links = links;
-  }
-
-  public void addLink(Link link) {
-    if (this.links == null) {
-      this.links = new ArrayList<>();
-    }
-    this.links.add(link);
   }
 
   public void setGatewayCode(GatewayCode gatewayCode) {

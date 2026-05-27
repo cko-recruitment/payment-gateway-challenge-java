@@ -1,7 +1,6 @@
 package com.checkout.payment.gateway.controller;
 
 import com.checkout.payment.gateway.model.GetPaymentResponse;
-import com.checkout.payment.gateway.model.Link;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.security.SecureLogger;
@@ -38,8 +37,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, key);
     return existing.map(response -> {
           GetPaymentResponse getResponse = GetPaymentResponse.from(response);
-          getResponse.addLink(new Link("self", "/api/v1/payments/idempotency/" + key, "GET"));
-          getResponse.addLink(new Link("payment", "/api/v1/payments/" + response.getId(), "GET"));
           return new ResponseEntity<>(getResponse, HttpStatus.OK);
         })
         .orElseGet(() -> new ResponseEntity<>(GetPaymentResponse.notFound(), HttpStatus.OK));
@@ -53,7 +50,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentById(merchantId, id);
     return existing.map(response -> {
           GetPaymentResponse getResponse = GetPaymentResponse.from(response);
-          getResponse.addLink(new Link("self", "/api/v1/payments/" + id, "GET"));
           return new ResponseEntity<>(getResponse, HttpStatus.OK);
         })
         .orElseGet(() -> new ResponseEntity<>(GetPaymentResponse.notFound(), HttpStatus.OK));
@@ -68,16 +64,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
     secureLogger.info("Processing payment for merchant={}, request={}, dedupeKey={}", merchantId, paymentRequest, dedupeKey);
 
     PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
-
-    // Check if it's a bank error response (retriable)
-    if (response.getCode() != null && (response.getCode().equals("BANK_UNAVAILABLE") || response.getCode().equals("BANK_ERROR"))) {
-      response.addLink(new Link("self", "/api/v1/payments", "POST"));
-      return new ResponseEntity<>(response, HttpStatus.OK);
-    }
-
-    response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
-    response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
-
     return new ResponseEntity<>(response, HttpStatus.OK);
   }
 

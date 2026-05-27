@@ -115,7 +115,6 @@ public class PostPaymentResponse extends BasePaymentResponse {
     response.setStatus(PaymentStatus.REJECTED);
     response.setDescription(description);
     response.setGatewayCode(GatewayCode.INVALID_REQUEST);
-    response.addLink(new Link("self", "/api/v1/payments", "POST"));
     Instant now = Instant.now();
     response.setCreatedAt(now);
     response.setUpdatedAt(now);
@@ -127,7 +126,6 @@ public class PostPaymentResponse extends BasePaymentResponse {
     response.setStatus(PaymentStatus.DECLINED);
     response.setDescription(description);
     response.setGatewayCode(GatewayCode.DECLINED);
-    response.addLink(new Link("self", "/api/v1/payments", "POST"));
     return response;
   }
 
