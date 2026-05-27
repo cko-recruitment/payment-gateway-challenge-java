@@ -127,6 +127,60 @@ curl -s http://localhost:8090/api/v1/payments \
 }
 ```
 
+### Step 4: Test Idempotency
+
+**Non-Retriable Error** (action=fix_request) - Cached forever:
+
+```bash
+KEY="fix-$(date +%s)"
+
+# First request - validation error, cached
+curl -s http://localhost:8090/api/v1/payments \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Merchant-Id: merchant-123" \
+  -H "Idempotency-Key: $KEY" \
+  -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '{code, action}'
+# → {"code": "INVALID_REQUEST", "action": "fix_request"}
+
+# Same key - returns cached error (no retry)
+curl -s http://localhost:8090/api/v1/payments \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Merchant-Id: merchant-123" \
+  -H "Idempotency-Key: $KEY" \
+  -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '{code, action}'
+# → {"code": "INVALID_REQUEST", "action": "fix_request"}
+```
+
+**Retriable Error** (action=retry) - Retried on next request:
+
+```bash
+KEY="retry-$(date +%s)"
+
+# First request - bank returns 503, action=retry
+curl -s http://localhost:8090/api/v1/payments \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Merchant-Id: merchant-123" \
+  -H "Idempotency-Key: $KEY" \
+  -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '{code, action}'
+# → {"code": "BANK_ERROR", "action": "retry"}
+
+# Same key - retries bank call (may succeed if bank recovers)
+curl -s http://localhost:8090/api/v1/payments \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Merchant-Id: merchant-123" \
+  -H "Idempotency-Key: $KEY" \
+  -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
+  | jq '{code, action}'
+# → {"code": "BANK_ERROR", "action": "retry"} (bank still down)
+```
+
 ---
 
 ## 2. Code Design
