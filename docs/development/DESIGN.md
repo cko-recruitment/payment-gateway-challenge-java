@@ -41,9 +41,15 @@ lsof -i :8080 || echo "Port 8080 is free"
 
 ## 1. API Design
 
-### Concept: 200-Only REST API
+### Concept
 
-All responses return HTTP 200. Business result is in the JSON body.
+| Decision | Why |
+|---------|-----|
+| **200-Only** | HTTP status = transport, business result in body. Simplifies client error handling. |
+| **Idempotency Key** | Same key → same result. Prevents duplicate charges on retry. |
+| **Action Field** | `none`/`retry`/`fix_request` tells client what to do next. |
+| **HATEOAS Links** | Response includes next-step URLs. API is self-discoverable. |
+| **createdAt/updatedAt** | Trace retry history without external IDs. |
 
 ### Start Application
 
