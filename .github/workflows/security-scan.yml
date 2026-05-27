@@ -169,6 +169,9 @@ jobs:
           mkdir -p zap-reports
           chmod 777 zap-reports
           
+          # Copy rules file to reports directory so container can access it
+          cp .zap/rules.tsv zap-reports/
+          
           # Run ZAP in API scan mode using OpenAPI spec
           docker run --rm \
             -v $(pwd)/zap-reports:/zap/wrk \
@@ -179,7 +182,7 @@ jobs:
             -f openapi \
             -r zap-api-report.html \
             -J zap-api-report.json \
-            -c /zap/wrk/../.zap/rules.tsv \
+            -c /zap/wrk/rules.tsv \
             -a
           
           # Copy reports back to workspace
