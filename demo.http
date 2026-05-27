@@ -128,7 +128,7 @@ Idempotency-Key: demo-decline-1
 ###
 # @name Step9_GetById
 # Use the id from Step2 response
-GET http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-446655440000
+GET http://localhost:8090/api/v1/payments/d6afa7a3-e112-469a-9fba-e401541cadcc
 Merchant-Id: merchant-123
 
 ###

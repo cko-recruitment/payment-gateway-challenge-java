@@ -3,8 +3,6 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.exception.BankProcessingException;
-import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
