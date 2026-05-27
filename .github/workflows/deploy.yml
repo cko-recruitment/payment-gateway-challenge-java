@@ -1,0 +1,164 @@
+name: Deploy to Production
+
+# 手动触发部署（演示用）
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud Provider'
+        required: true
+        default: 'aliyun'
+        type: choice
+        options:
+          - aliyun
+          - aws
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.cloud_provider }} - ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 设置 JDK（用于构建）
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 构建应用
+      - name: Build Application
+        run: ./gradlew bootJar
+
+      # 设置 Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      # 阿里云部署
+      - name: Deploy to Aliyun
+        if: inputs.cloud_provider == 'aliyun'
+        env:
+          ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+          ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
+        run: |
+          cd terraform/aliyun
+          terraform init
+          terraform plan
+          terraform apply -auto-approve
+
+      # AWS 部署
+      - name: Deploy to AWS
+        if: inputs.cloud_provider == 'aws'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          cd terraform/aws
+          terraform init
+          terraform plan
+          terraform apply -auto-approve
+
+      # 构建 Docker 镜像
+      - name: Build Docker Image
+        run: |
+          docker build -t payment-gateway:${{ github.sha }} .
+
+      # 推送镜像到仓库（阿里云容器镜像服务）
+      - name: Push to Aliyun ACR
+        if: inputs.cloud_provider == 'aliyun'
+        run: |
+          # 登录阿里云容器镜像服务
+          docker login --username=${{ secrets.ALICLOUD_REGISTRY_USER }} \
+            registry.cn-hangzhou.aliyuncs.com \
+            --password=${{ secrets.ALICLOUD_REGISTRY_PASSWORD }}
+          
+          # 打标签并推送
+          docker tag payment-gateway:${{ github.sha }} \
+            registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }}
+          docker push \
+            registry.cn-hangzhou.aliyuncs.com/${{ secrets.ALICLOUD_NAMESPACE }}/payment-gateway:${{ github.sha }}
+
+      # 推送镜像到 AWS ECR
+      - name: Push to AWS ECR
+        if: inputs.cloud_provider == 'aws'
+        run: |
+          # 登录 AWS ECR
+          aws ecr get-login-password --region us-east-1 | \
+            docker login --username AWS --password-stdin \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+          
+          # 打标签并推送
+          docker tag payment-gateway:${{ github.sha }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/payment-gateway:${{ github.sha }}
+          docker push \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/payment-gateway:${{ github.sha }}
+
+      # 配置 kubectl
+      - name: Configure kubectl (Aliyun)
+        if: inputs.cloud_provider == 'aliyun'
+        run: |
+          aliyun cs GET /k8s/$(terraform -chdir=terraform/aliyun output -raw cluster_id)/user_config > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Configure kubectl (AWS)
+        if: inputs.cloud_provider == 'aws'
+        run: |
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name $(terraform -chdir=terraform/aws output -raw cluster_name)
+
+      # 部署到 K8s
+      - name: Deploy to Kubernetes
+        run: |
+          # 更新镜像标签
+          sed -i 's|image: .*|image: payment-gateway:${{ github.sha }}|' \
+            k8s/overlays/${{ inputs.environment }}/deployment-patch.yaml
+          
+          # 应用配置
+          kubectl apply -k k8s/overlays/${{ inputs.environment }}
+          
+          # 等待部署完成
+          kubectl rollout status deployment/payment-gateway \
+            -n payment-gateway \
+            --timeout=300s
+
+      # 验证部署
+      - name: Verify Deployment
+        run: |
+          kubectl get pods -n payment-gateway
+          kubectl get svc -n payment-gateway
+
+      # 通知（可选）
+      - name: Post Deploy Summary
+        if: github.event_name == 'workflow_dispatch'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: deploy-summary
+          message: |
+            ## 🚀 Deployment Summary
+
+            | Item | Value |
+            |------|-------|
+            | Cloud Provider | ${{ inputs.cloud_provider }} |
+            | Environment | ${{ inputs.environment }} |
+            | Commit | ${{ github.sha }} |
+            | Status | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |
+
+            ### Resources
+            - Terraform State: `terraform/${{ inputs.cloud_provider }}/terraform.tfstate`
+            - K8s Overlay: `k8s/overlays/${{ inputs.environment }}/`
+            - Image Tag: `payment-gateway:${{ github.sha }}`
