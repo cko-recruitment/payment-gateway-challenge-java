@@ -13,6 +13,10 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+  # Credentials are loaded from:
+  # 1. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+  # 2. AWS CLI config (~/.aws/credentials)
+  # 3. IAM Role (when running on AWS)
 }
 
 # VPC Module - Network foundation
