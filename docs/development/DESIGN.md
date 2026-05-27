@@ -13,15 +13,21 @@ Each section contains:
 # Kill any running Java processes (Spring Boot app)
 kill $(lsof -t -i:8090) 2>/dev/null || true
 
-# Kill any running bank simulator containers
+# Kill any running bank simulator containers (including old ones)
 docker stop bank-simulator 2>/dev/null || true
 docker rm bank-simulator 2>/dev/null || true
+
+# If port 2525 or 8080 is still in use, kill the process
+kill $(lsof -t -i:2525) 2>/dev/null || true
+kill $(lsof -t -i:8080) 2>/dev/null || true
 
 # Wait for cleanup
 sleep 2
 
 # Verify ports are free
 lsof -i :8090 || echo "Port 8090 is free"
+lsof -i :2525 || echo "Port 2525 is free"
+lsof -i :8080 || echo "Port 8080 is free"
 ```
 
 ---
