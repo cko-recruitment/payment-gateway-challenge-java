@@ -199,6 +199,28 @@ Open any PR → CI posts combined test + coverage report as comment:
 | Functional Tests | 🟢 40% |
 | **Combined** | **🟢 85%** |
 
+### Load Test
+
+```bash
+# Run with k6 (requires app running)
+docker-compose -f docker-compose.yml -f docker-compose.loadtest.yml up k6
+
+# Or run locally with k6 installed
+k6 run load-tests/load-test.js
+```
+
+**What it tests:**
+| Stage | Duration | Users | Purpose |
+|-------|----------|-------|---------|
+| Ramp up | 30s | 10 | Warm up |
+| Steady | 1m | 50 | Normal load |
+| Peak | 30s | 100 | Trigger rate limit |
+| Ramp down | 30s | 0 | Cool down |
+
+**Thresholds:**
+- 95% requests < 500ms
+- Error rate < 10% (excluding rate-limited requests)
+
 ---
 
 ## 4. Packaging / Hosting
