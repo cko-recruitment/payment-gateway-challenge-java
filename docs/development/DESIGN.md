@@ -7,6 +7,12 @@ Each section contains:
 - **Demo Steps**: Exact commands to run
 - **Verify**: How to confirm it works
 
+### Prerequisites
+
+1. Install VS Code extension **REST Client** (humao.rest-client)
+2. Open `demo.http` file in VS Code
+3. Click **Send Request** above any request, or press `Cmd+Alt+R` (Mac)
+
 ### Before Each Demo: Clean Environment
 
 ```bash
@@ -62,8 +68,10 @@ sleep 5
 
 ### Step 2: Test Successful Payment
 
+Open `demo.http` in VS Code, find **Step2_SuccessPayment**, click **Send Request**.
+
+Or use curl:
 ```bash
-# Request
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
@@ -71,23 +79,17 @@ curl -s http://localhost:8090/api/v1/payments \
   -H "Idempotency-Key: key-1" \
   -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq .
+```
 
-# Expected Response
+**Expected Response:**
+```json
 {
   "code": "SUCCESS",
   "description": "Payment authorized successfully",
   "action": "none",
   "links": [
-    {
-      "rel": "self",
-      "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000",
-      "method": "GET"
-    },
-    {
-      "rel": "idempotency",
-      "href": "/api/v1/payments/idempotency/key-1",
-      "method": "GET"
-    }
+    { "rel": "self", "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000", "method": "GET" },
+    { "rel": "idempotency", "href": "/api/v1/payments/idempotency/key-1", "method": "GET" }
   ],
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "Authorized",
@@ -101,8 +103,9 @@ curl -s http://localhost:8090/api/v1/payments \
 
 ### Step 3: Test Validation Error (Still HTTP 200)
 
+In `demo.http`: **Step4_ValidationError** → Send Request
+
 ```bash
-# Request with invalid card number
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
@@ -110,18 +113,16 @@ curl -s http://localhost:8090/api/v1/payments \
   -H "Idempotency-Key: key-2" \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq .
+```
 
-# Expected Response
+**Expected Response:**
+```json
 {
   "code": "INVALID_REQUEST",
   "description": "Card number must be between 14 and 19 digits; Card number must only contain numeric characters",
   "action": "fix_request",
   "links": [
-    {
-      "rel": "self",
-      "href": "/api/v1/payments",
-      "method": "POST"
-    }
+    { "rel": "self", "href": "/api/v1/payments", "method": "POST" }
   ],
   "status": "Rejected"
 }
@@ -135,15 +136,15 @@ Use `createdAt` and `updatedAt` to trace request history:
 
 **Non-Retriable Error** (action=fix_request) - Cached forever:
 
-```bash
-KEY="fix-$(date +%s)"
+In `demo.http`: **Step4_ValidationError** then **Step5_ValidationCacheHit**
 
+```bash
 # First request - validation error, cached
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: $KEY" \
+  -H "Idempotency-Key: demo-validation" \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq '{createdAt, updatedAt, code, action}'
 # → createdAt == updatedAt (first attempt)
@@ -153,7 +154,7 @@ curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: $KEY" \
+  -H "Idempotency-Key: demo-validation" \
   -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq '{createdAt, updatedAt, code, action}'
 # → createdAt == updatedAt (cached, same timestamps)
@@ -161,15 +162,15 @@ curl -s http://localhost:8090/api/v1/payments \
 
 **Retriable Error** (action=retry) - Retried on next request:
 
-```bash
-KEY="retry-$(date +%s)"
+In `demo.http`: **Step6_RetriableError** then **Step7_RetryAgain**
 
+```bash
 # First request - bank returns 503, action=retry
 curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: $KEY" \
+  -H "Idempotency-Key: demo-retry" \
   -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq '{createdAt, updatedAt, code, action}'
 # → createdAt == updatedAt (first attempt)
@@ -179,7 +180,7 @@ curl -s http://localhost:8090/api/v1/payments \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: $KEY" \
+  -H "Idempotency-Key: demo-retry" \
   -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
   | jq '{createdAt, updatedAt, code, action}'
 # → createdAt < updatedAt (retried! updatedAt changed)
@@ -187,23 +188,23 @@ curl -s http://localhost:8090/api/v1/payments \
 
 ### Step 5: Retrieve Payment by ID
 
+In `demo.http`: **Step9_GetById** → Send Request
+
 ```bash
-# Use the ID from Step 2
+# Use the id from Step 2
 curl -s http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-446655440000 \
   -H "Merchant-Id: merchant-123" \
   | jq .
+```
 
-# Expected Response
+**Expected Response:**
+```json
 {
   "code": "SUCCESS",
   "description": "Payment authorized successfully",
   "action": "none",
   "links": [
-    {
-      "rel": "self",
-      "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000",
-      "method": "GET"
-    }
+    { "rel": "self", "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000", "method": "GET" }
   ],
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "Authorized",
@@ -217,13 +218,12 @@ curl -s http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-4466554400
 
 ### Step 6: Retrieve Payment by Idempotency Key
 
+In `demo.http`: **Step10_GetByIdempotencyKey** → Send Request
+
 ```bash
-# Use the key from Step 2
 curl -s http://localhost:8090/api/v1/payments/idempotency/key-1 \
   -H "Merchant-Id: merchant-123" \
   | jq .
-
-# Expected Response (same as Step 5)
 ```
 
 ---
@@ -465,6 +465,9 @@ curl -s http://localhost:8090/v3/api-docs > openapi.json
 
 ### Step 2: View Swagger UI
 
+In `demo.http`: **Step11_SwaggerUI** → Send Request
+
+Or:
 ```bash
 # Open in browser
 open http://localhost:8090/swagger-ui.html
@@ -503,6 +506,8 @@ docker-compose ps
 
 ### Step 2: Check Prometheus Metrics
 
+In `demo.http`: **Step12_PrometheusMetrics** → Send Request
+
 ```bash
 # View raw metrics
 curl -s http://localhost:8090/actuator/prometheus | grep payment
@@ -531,6 +536,8 @@ open http://localhost:3000
 
 ### Step 4: View Health Checks
 
+In `demo.http`: **Step1_HealthCheck** → Send Request
+
 ```bash
 # Overall health
 curl -s http://localhost:8090/actuator/health | jq .
@@ -548,12 +555,7 @@ curl -s http://localhost:8090/actuator/health/readiness
 # Start with tracing enabled
 docker-compose -f docker-compose.yml -f docker-compose.tracing.yml up -d
 
-# Make a payment request
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: trace-demo" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}'
+# Make a payment request (use demo.http Step2)
 
 # Open Jaeger UI
 open http://localhost:16686
@@ -573,16 +575,16 @@ open http://localhost:16686
 docker-compose up -d
 
 # 2. Show API (30s)
-curl http://localhost:8090/api/v1/payments -X POST ...
+# Use demo.http: Step2_SuccessPayment → Send Request
 
 # 3. Show idempotency (30s)
-curl same request twice → same ID
+# demo.http: Step3_CacheHit → Send Request (same ID)
 
 # 4. Show tests (1m)
 ./gradlew test integrationTest functionalTest
 
 # 5. Show metrics (30s)
-curl http://localhost:8090/actuator/prometheus
+# demo.http: Step12_PrometheusMetrics → Send Request
 
 # 6. Show traces (1m)
 open http://localhost:16686
