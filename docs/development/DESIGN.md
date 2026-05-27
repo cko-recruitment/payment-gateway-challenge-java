@@ -203,10 +203,7 @@ Open any PR → CI posts combined test + coverage report as comment:
 
 **1. Start app + observability stack**
 ```bash
-# Start main app first (creates the network)
-docker-compose up -d
-
-# Then start observability (uses same network)
+# Start everything (app + bank + prometheus + grafana)
 docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 ```
 
