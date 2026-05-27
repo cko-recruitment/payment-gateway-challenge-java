@@ -261,7 +261,7 @@ jobs:
             
             **Action Required**: Please review and fix these vulnerabilities before merging.' || '' }}
 
-            📄 [Full ZAP Report](../../actions/runs/${{ github.run_id }})
+            📄 [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) | [Download ZAP Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
 
             ### Scan Coverage
             - **API Spec**: OpenAPI 3.0 from `/v3/api-docs`
