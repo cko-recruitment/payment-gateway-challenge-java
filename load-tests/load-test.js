@@ -23,7 +23,9 @@ export const options = {
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
 
 export default function () {
-  const merchantId = `merchant-${__VU}`;
+  // Use fixed merchant ID to trigger rate limit (10 req/s per merchant)
+  // __VU % 10 creates 10 merchants, each sending ~10 req/s at peak load
+  const merchantId = `merchant-${__VU % 10}`;
   const idempotencyKey = `key-${__VU}-${__ITER}`;
 
   const payload = JSON.stringify({

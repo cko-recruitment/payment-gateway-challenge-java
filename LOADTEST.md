@@ -132,7 +132,7 @@ rate_limit_hits..........: 312 total
 sum(rate(payment_total[1m]))
 
 # Rate limit percentage
-sum(rate(rate_limit_hits[1m])) / sum(rate(payment_total[1m])) * 100
+sum(rate(rate_limit_rejected_total[1m])) / sum(rate(payment_total[1m])) * 100
 
 # P99 at peak
 histogram_quantile(0.99, sum(rate(payment_latency_seconds_bucket[5m])) by (le))

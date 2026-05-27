@@ -447,7 +447,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(rate_limit_hits[1m]))",
+          "expr": "sum(rate(rate_limit_rejected_total[1m]))",
           "legendFormat": "Rate Limit Hits",
           "refId": "A"
         }
@@ -515,7 +515,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(rate_limit_rejected[1m]))",
+          "expr": "sum(rate(rate_limit_rejected_total[1m]))",
           "legendFormat": "RATE_LIMIT",
           "refId": "C"
         }

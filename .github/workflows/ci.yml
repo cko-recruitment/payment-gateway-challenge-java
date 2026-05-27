@@ -80,19 +80,19 @@ jobs:
           tree = ET.parse('build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml')
           root = tree.getroot()
           
-          # Overall coverage
+          # Overall coverage - counters are direct children of <report>
           total_missed = 0
           total_covered = 0
-          for counter in root.findall('.//report/counter'):
+          for counter in root.findall('counter'):
               if counter.get('type') == 'INSTRUCTION':
                   total_missed += int(counter.get('missed', 0))
                   total_covered += int(counter.get('covered', 0))
           
           overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
           
-          # Package level
+          # Package level - packages are direct children of <report>
           packages = []
-          for pkg in root.findall('.//package'):
+          for pkg in root.findall('package'):
               name = pkg.get('name', '').replace('/', '.')
               missed = 0
               covered = 0
@@ -125,7 +125,8 @@ jobs:
           
           print(f"overall={overall:.1f}")
           EOF
-          echo "overall=$(cat coverage-comment.md | head -1 | grep -o '[0-9.]*%' | head -1)" >> $GITHUB_OUTPUT
+          # Extract percentage number for step output (e.g. "80.3%" -> "80.3")
+          echo "overall=$(sed -n 's/.*Coverage Report: \([0-9.]*\)%.*/\1/p' coverage-comment.md)" >> $GITHUB_OUTPUT
 
       - name: Post Coverage Comment
         if: github.event_name == 'pull_request'

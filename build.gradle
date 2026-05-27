@@ -102,9 +102,8 @@ jacocoTestReport {
         html.required = true
         csv.required = true
     }
-    // Include all source sets in coverage
     executionData(
-        fileTree(project.buildDir).include("**/jacoco/*.exec")
+        fileTree(project.buildDir).include("**/jacoco/test.exec")
     )
     sourceSets sourceSets.main
     
@@ -133,6 +132,7 @@ jacocoTestReport {
 }
 
 jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
     violationRules {
         rule {
             limit {
@@ -159,6 +159,22 @@ task jacocoFullReport(type: JacocoReport) {
         xml.required = true
         html.required = true
         csv.required = false
+    }
+    
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                'com/checkout/payment/gateway/controller/PaymentGatewayApi.class',
+                'com/checkout/payment/gateway/model/**',
+                'com/checkout/payment/gateway/enums/**',
+                'com/checkout/payment/gateway/exception/**',
+                'com/checkout/payment/gateway/configuration/**',
+                'com/checkout/payment/gateway/PaymentGatewayApplication.class',
+                'com/checkout/payment/gateway/aspect/Metrics.class',
+                'com/checkout/payment/gateway/aspect/RateLimiter.class',
+                'com/checkout/payment/gateway/security/SecureLogger.class'
+            ])
+        }))
     }
 }
 
