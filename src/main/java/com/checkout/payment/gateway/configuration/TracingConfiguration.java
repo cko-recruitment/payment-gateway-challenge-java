@@ -1,25 +1,23 @@
 package com.checkout.payment.gateway.configuration;
 
-import io.micrometer.tracing.Tracer;
-import io.micrometer.tracing.annotation.NewSpan;
-import io.micrometer.tracing.annotation.SpanTag;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.aop.ObservedAspect;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.filter.ServerHttpObservationFilter;
 
 /**
- * Distributed tracing configuration using OpenTelemetry.
+ * Distributed tracing configuration using Micrometer Observation.
  * 
  * Traces flow across:
  * - Controller → Service → Client → Bank
- * - Each span captures timing, tags, and errors
+ * - Each observation captures timing, tags, and errors
  * - Exported to Jaeger for visualization
  */
 @Configuration
 public class TracingConfiguration {
 
     @Bean
-    public ServerHttpObservationFilter observationFilter() {
-        return new ServerHttpObservationFilter();
+    public ObservedAspect observedAspect(ObservationRegistry observationRegistry) {
+        return new ObservedAspect(observationRegistry);
     }
 }

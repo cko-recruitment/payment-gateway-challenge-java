@@ -28,7 +28,6 @@ public class BankSimulatorClient implements BankClient {
     this.bankUrl = bankUrl;
   }
 
-  @io.micrometer.tracing.annotation.NewSpan("bank-call")
   public BankPaymentResponse processPayment(PostPaymentRequest paymentRequest) {
     Map<String, Object> requestBody = new HashMap<>();
     requestBody.put("card_number", paymentRequest.getCardNumber());

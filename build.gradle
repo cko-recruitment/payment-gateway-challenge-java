@@ -46,6 +46,8 @@ dependencies {
     // Distributed Tracing - OpenTelemetry
     implementation 'io.micrometer:micrometer-tracing-bridge-otel'
     implementation 'io.opentelemetry:opentelemetry-exporter-jaeger'
+    implementation 'io.micrometer:micrometer-observation'
+    implementation 'org.aspectj:aspectjweaver:1.9.20'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
