@@ -44,7 +44,11 @@ public class PaymentGatewayService {
     return idempotencyRepository.getById(merchantId, id);
   }
 
-  public PostPaymentResponse processPayment(String merchantId, PostPaymentRequest paymentRequest, String dedupeKey) {
+  @NewSpan("process-payment")
+  public PostPaymentResponse processPayment(
+      @SpanTag("merchant.id") String merchantId, 
+      PostPaymentRequest paymentRequest, 
+      @SpanTag("idempotency.key") String dedupeKey) {
     secureLogger.info("Processing payment for merchant={}, request={}", merchantId, paymentRequest);
     List<String> validationErrors = validateRequest(paymentRequest);
     if (!validationErrors.isEmpty()) {

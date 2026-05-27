@@ -1,0 +1,27 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: payment-gateway
+spec:
+  selector:
+    matchLabels:
+      app: payment-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/api/v1/payments"]
+        - operation:
+            methods: ["GET"]
+            paths: ["/api/v1/payments/*"]
+    - from:
+        - source:
+            namespaces: ["payment-gateway-prod"]
+      to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/actuator/health", "/actuator/prometheus"]

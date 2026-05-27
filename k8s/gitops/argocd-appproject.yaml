@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: payment-gateway
+  namespace: argocd
+spec:
+  description: Payment Gateway Application
+  sourceRepos:
+    - https://github.com/james-yz-xie/payment-gateway-challenge-java
+  destinations:
+    - namespace: payment-gateway-prod
+      server: https://kubernetes.default.svc
+    - namespace: payment-gateway-dev
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+  orphanedResources:
+    warn: true

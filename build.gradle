@@ -42,6 +42,10 @@ dependencies {
     // Observability — Actuator health checks and Prometheus metrics
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // Distributed Tracing - OpenTelemetry
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+    implementation 'io.opentelemetry:opentelemetry-exporter-jaeger'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

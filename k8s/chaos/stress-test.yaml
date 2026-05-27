@@ -1,0 +1,17 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: payment-gateway-cpu-stress
+  namespace: chaos-testing
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - payment-gateway-prod
+    labelSelectors:
+      app: payment-gateway
+  stressors:
+    cpu:
+      workers: 2
+      load: 80
+  duration: '3m'

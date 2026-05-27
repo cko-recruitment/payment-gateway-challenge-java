@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-gateway-image-updater
+  namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: payment-gateway=jamesyzxie/payment-gateway
+    argocd-image-updater.argoproj.io/payment-gateway.update-strategy: semver
+    argocd-image-updater.argoproj.io/payment-gateway.allow-tags: regexp:^[0-9]+\\.[0-9]+\\.[0-9]+$
+    argocd-image-updater.argoproj.io/write-back-method: git
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/james-yz-xie/payment-gateway-challenge-java
+    targetRevision: HEAD
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: payment-gateway-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

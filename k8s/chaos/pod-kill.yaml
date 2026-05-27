@@ -1,0 +1,16 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: payment-gateway-pod-kill
+  namespace: chaos-testing
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - payment-gateway-prod
+    labelSelectors:
+      app: payment-gateway
+  scheduler:
+    cron: '@every 10m'
+  duration: '30s'
