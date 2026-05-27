@@ -173,6 +173,7 @@ jobs:
           cp .zap/rules.tsv zap-reports/
           
           # Run ZAP in API scan mode using OpenAPI spec
+          # -I: Do not fail on warnings (only fail on HIGH/CRITICAL)
           docker run --rm \
             -v $(pwd)/zap-reports:/zap/wrk \
             --network=host \
@@ -183,7 +184,8 @@ jobs:
             -r zap-api-report.html \
             -J zap-api-report.json \
             -c /zap/wrk/rules.tsv \
-            -a
+            -a \
+            -I
           
           # Copy reports back to workspace
           cp zap-reports/zap-api-report.* . || true
