@@ -127,27 +127,6 @@ curl -s http://localhost:8090/api/v1/payments \
 }
 ```
 
-### Step 4: Test Idempotency
-
-```bash
-# First request - processes payment
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: same-key" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '.id'
-
-# Second request with same key - returns cached result
-# Note: Same ID, no duplicate charge
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: same-key" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '.id'
-```
-
 ---
 
 ## 2. Code Design
