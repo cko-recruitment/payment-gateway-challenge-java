@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: payment-gateway

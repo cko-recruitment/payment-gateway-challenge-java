@@ -11,3 +11,13 @@ namePrefix: dev-
 replicas:
   - name: payment-gateway
     count: 1
+
+images:
+  - name: payment-gateway
+    newTag: "latest"
+
+patches:
+  - path: patch-resources.yaml
+    target:
+      kind: Deployment
+      name: payment-gateway
