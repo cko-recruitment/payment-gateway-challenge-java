@@ -11,4 +11,3 @@ services:
 networks:
   default:
     name: payment-gateway-network
-    external: true
