@@ -7,6 +7,23 @@ Each section contains:
 - **Demo Steps**: Exact commands to run
 - **Verify**: How to confirm it works
 
+### Before Each Demo: Clean Environment
+
+```bash
+# Kill any running Java processes (Spring Boot app)
+kill $(lsof -t -i:8090) 2>/dev/null || true
+
+# Kill any running bank simulator containers
+docker stop bank-simulator 2>/dev/null || true
+docker rm bank-simulator 2>/dev/null || true
+
+# Wait for cleanup
+sleep 2
+
+# Verify ports are free
+lsof -i :8090 || echo "Port 8090 is free"
+```
+
 ---
 
 ## 1. API Design
