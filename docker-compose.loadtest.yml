@@ -1,0 +1,14 @@
+services:
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./load-tests:/tests
+    command: run /tests/load-test.js
+    environment:
+      - BASE_URL=http://payment-gateway:8090
+
+networks:
+  default:
+    name: payment-gateway-network
+    external: true

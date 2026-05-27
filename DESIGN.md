@@ -17,8 +17,9 @@ Controller (HTTP) → Service (Business Logic) → Repository (Storage)
 ```
 
 **Key Responsibilities (following SOLID principles):**
-- **`PaymentGatewayController`**: Thin layer for request routing and resource orchestration. It maintains the "200-Only" API contract. *(Single Responsibility Principle)*
-- **`PaymentGatewayService`**: The core engine for validation, bank interaction, and persistence orchestration. Depends on abstractions (`BankClient`, `IdempotencyRepository`) rather than concrete implementations. *(Dependency Inversion Principle)*
+- **`PaymentGatewayController`**: Thin layer for request routing and HTTP response orchestration. Maintains the "200-Only" API contract. Delegates all business logic to Service. *(Single Responsibility Principle)*
+- **`PaymentGatewayApi`**: Interface containing all OpenAPI/Swagger annotations. Separates API documentation from implementation to keep Controller readable. *(Interface Segregation Principle)*
+- **`PaymentGatewayService`**: The core engine for validation, bank interaction, and persistence orchestration. Depends on abstractions (`BankClient`, `IdempotencyRepository`) rather than concrete implementations. Handles business exceptions and converts them to domain responses. *(Dependency Inversion Principle)*
 - **`IdempotencyRepository`**: Interface defining the contract for dual-indexed storage (System ID and Idempotency Key) with merchant isolation. `InMemoryIdempotencyRepository` provides the concrete in-memory implementation. *(Interface Segregation & Liskov Substitution Principles)*
 - **`BankClient`**: Interface abstracting external bank communication, allowing the service to remain agnostic of the actual bank integration. `BankSimulatorClient` implements this for the simulator. *(Open/Closed Principle)*
 
@@ -78,7 +79,23 @@ Currency validation is not merely format-based. The system utilizes `java.util.C
 
 ---
 
-## 5. Non-Functional Concerns (AOP)
+## 5. Error Handling Strategy
+
+### Decision: Service Throws, Controller Translates
+
+Following clean architecture principles, error handling responsibility is split by layer:
+
+- **Service Layer**: Detects errors (validation failures, bank exceptions) and throws domain exceptions (`PaymentValidationException`, `BankProcessingException`).
+- **Controller Layer**: Catches domain exceptions and translates them into `PostPaymentResponse` with appropriate `GatewayCode`.
+
+**Rationale:**
+- **Separation of Concerns**: Service knows business rules, Controller knows HTTP contract.
+- **Testability**: Service tests verify exception throwing; Controller tests verify response mapping.
+- **Consistency**: All error responses share the same JSON structure via `PostPaymentResponse.rejected()` / `bankErrorResponse()`.
+
+---
+
+## 6. Non-Functional Concerns (AOP)
 
 ### Decision: Cross-Cutting Concerns via Spring AOP
 Rate limiting and metrics are implemented as aspects to avoid polluting business logic:
@@ -88,14 +105,38 @@ Rate limiting and metrics are implemented as aspects to avoid polluting business
 
 **Why AOP:** Follows SRP/OCP. Business code does not know about rate limiting or metrics.
 
-## 6. Storage and Performance
+---
+
+## 7. Storage and Performance
 
 ### Decision: Dual-Indexed In-Memory Repository
 The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID and Idempotency Key). This provides **O(1)** retrieval performance for all `GET` operations while keeping the architecture simple for the current scope.
 
 ---
 
-## 7. Assumptions and Limitations
+## 8. CI/CD and Quality Gates
+
+### Decision: GitHub Actions with Coverage Enforcement
+
+The project uses GitHub Actions for continuous integration with the following quality gates:
+
+- **Build & Unit Tests**: Compile and run JUnit tests on every PR.
+- **Coverage Report**: JaCoCo generates coverage reports, posted as PR comments via `madrapps/jacoco-report`.
+- **Coverage Threshold**: 70% minimum for overall and changed files. PRs failing this threshold are blocked from merge.
+- **Dependency Review**: Scans PRs for known vulnerabilities in dependencies.
+- **PR Size Labeling**: Auto-labels PRs by size (xs/s/m/l/xl) to encourage small, reviewable changes.
+
+**Excluded from Coverage:**
+- Swagger API interfaces (`PaymentGatewayApi`)
+- Model/POJO classes (`model/**`, `enums/**`)
+- Exception classes (`exception/**`)
+- Spring configuration (`configuration/**`)
+- Unused TODO interfaces (`Metrics`, `RateLimiter`)
+- Security wrappers and main class
+
+---
+
+## 9. Assumptions and Limitations
 
 1.  **Volatility**: Data is lost on application restart (In-memory storage).
 2.  **Context Trust**: `Merchant-Id` is trusted from the header without cryptographic verification (Exercise scope).
@@ -103,7 +144,7 @@ The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID 
 
 ---
 
-## 8. Design Trade-offs Summary
+## 10. Design Trade-offs Summary
 
 | Trade-off | Choice | Rationale |
 | :--- | :--- | :--- |
@@ -113,3 +154,6 @@ The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID 
 | **Logging** | Masking | PII protection implemented via `toString()` overrides in models. |
 | **Rate Limiting** | Multi-granularity Fixed Window | 1s (10 req) + 60s (600 req). Protects downstream while allowing bursts. |
 | **Metrics** | AOP + SLF4J | Non-invasive. Upgrade to Micrometer without touching business code. |
+| **Swagger** | Interface Separation | `PaymentGatewayApi` holds all OpenAPI annotations; `PaymentGatewayController` stays clean. |
+| **Error Handling** | Service Throws / Controller Catches | Clean separation between business logic and HTTP representation. |
+| **Coverage** | JaCoCo + PR Enforcement | 70% threshold with automatic PR comments; non-business code excluded. |

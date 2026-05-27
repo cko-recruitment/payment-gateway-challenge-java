@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-gateway
+spec:
+  selector:
+    app: payment-gateway
+  ports:
+    - port: 80
+      targetPort: 8090
+  type: ClusterIP

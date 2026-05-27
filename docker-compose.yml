@@ -1,6 +1,19 @@
-version: "3.8"
-
 services:
+  payment-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - payment-gateway:latest
+    container_name: payment-gateway
+    image: payment-gateway:latest
+    ports:
+      - "8090:8090"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+    depends_on:
+      - bank_simulator
+
   bank_simulator:
     container_name: bank_simulator
     image: bbyars/mountebank:2.8.1
@@ -12,4 +25,7 @@ services:
       - type: bind
         source: ./imposters
         target: /imposters
-      
+
+networks:
+  default:
+    name: payment-gateway-network

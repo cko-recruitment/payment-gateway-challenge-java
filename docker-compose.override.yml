@@ -1,0 +1,8 @@
+# Override for local development - mounts local build cache
+services:
+  payment-gateway:
+    volumes:
+      - gradle-cache:/home/gradle/.gradle
+
+volumes:
+  gradle-cache:

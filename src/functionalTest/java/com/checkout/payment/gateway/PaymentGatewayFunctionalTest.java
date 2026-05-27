@@ -12,14 +12,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
-@SpringBootTest(webEnvironment = WebEnvironment.DEFINED_PORT)
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 class PaymentGatewayFunctionalTest {
+
+  @LocalServerPort
+  private int port;
 
   @Autowired
   private TestRestTemplate restTemplate;
@@ -163,21 +167,25 @@ class PaymentGatewayFunctionalTest {
       headers.set("Idempotency-Key", dedupeKey);
     }
     HttpEntity<PostPaymentRequest> entity = new HttpEntity<>(request, headers);
-    return restTemplate.postForEntity("/api/v1/payments", entity, PostPaymentResponse.class);
+    return restTemplate.postForEntity(baseUrl() + "/api/v1/payments", entity, PostPaymentResponse.class);
   }
 
   private ResponseEntity<PostPaymentResponse> getPaymentByIdempotencyKey(String merchantId, String dedupeKey) {
     HttpHeaders headers = new HttpHeaders();
     headers.set("Merchant-Id", merchantId);
     HttpEntity<Void> entity = new HttpEntity<>(headers);
-    return restTemplate.exchange("/api/v1/payments/idempotency/" + dedupeKey, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
+    return restTemplate.exchange(baseUrl() + "/api/v1/payments/idempotency/" + dedupeKey, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
   }
 
   private ResponseEntity<PostPaymentResponse> getPaymentById(String merchantId, UUID id) {
     HttpHeaders headers = new HttpHeaders();
     headers.set("Merchant-Id", merchantId);
     HttpEntity<Void> entity = new HttpEntity<>(headers);
-    return restTemplate.exchange("/api/v1/payments/" + id, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
+    return restTemplate.exchange(baseUrl() + "/api/v1/payments/" + id, org.springframework.http.HttpMethod.GET, entity, PostPaymentResponse.class);
+  }
+
+  private String baseUrl() {
+    return "http://localhost:" + port;
   }
 
   private PostPaymentRequest buildPaymentRequest(String cardNumber, String currency, int amount) {

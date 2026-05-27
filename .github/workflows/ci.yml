@@ -25,39 +25,273 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Start Bank Simulator
+        run: |
+          docker run -d --name bank-simulator \
+            -p 2525:2525 -p 8080:8080 \
+            -v ${{ github.workspace }}/imposters:/imposters \
+            bbyars/mountebank:2.8.1 \
+            --configfile /imposters/bank_simulator.ejs --allowInjection
+          sleep 5
+          curl -f http://localhost:2525/imposters || (echo "Bank simulator failed to start" && exit 1)
+
+      - name: Set Bank URL for CI
+        run: echo "BANK_URL=http://localhost:8080/payments" >> $GITHUB_ENV
+
       - name: Build
         run: ./gradlew build -x test
 
       - name: Unit Tests
         run: ./gradlew test
 
-      - name: Generate Coverage Report
-        run: ./gradlew jacocoTestReport
+      - name: Integration Tests
+        run: ./gradlew integrationTest
 
-      - name: Debug Coverage Report Exists
+      - name: Functional Tests
+        run: ./gradlew functionalTest
+
+      - name: Generate Test Report
         if: github.event_name == 'pull_request'
         run: |
-          ls -la build/reports/jacoco/test/
-          head -20 build/reports/jacoco/test/jacocoTestReport.xml
+          python3 << 'EOF'
+          import xml.etree.ElementTree as ET
+          import glob
+          import os
 
-      - name: Add Coverage to PR Comment
-        uses: madrapps/jacoco-report@v1.6.1
+          def parse_test_results(pattern, label):
+              files = glob.glob(pattern)
+              total = passed = failed = skipped = errors = 0
+              for f in files:
+                  try:
+                      tree = ET.parse(f)
+                      root = tree.getroot()
+                      total += int(root.get('tests', 0))
+                      failed += int(root.get('failures', 0))
+                      errors += int(root.get('errors', 0))
+                      skipped += int(root.get('skipped', 0))
+                  except Exception:
+                      pass
+              passed = total - failed - errors - skipped
+              return {
+                  'label': label,
+                  'total': total,
+                  'passed': passed,
+                  'failed': failed + errors,
+                  'skipped': skipped
+              }
+
+          unit = parse_test_results('build/test-results/test/*.xml', 'Unit Tests')
+          integration = parse_test_results('build/test-results/integrationTest/*.xml', 'Integration Tests')
+          functional = parse_test_results('build/test-results/functionalTest/*.xml', 'Functional Tests')
+
+          lines = []
+          lines.append("## 🧪 Test Results")
+          lines.append("")
+          lines.append("| Test Type | Total | ✅ Passed | ❌ Failed | ⏭️ Skipped |")
+          lines.append("|-----------|-------|-----------|-----------|------------|")
+
+          for result in [unit, integration, functional]:
+              status = "🟢" if result['failed'] == 0 else "🔴"
+              lines.append(f"| {status} {result['label']} | {result['total']} | {result['passed']} | {result['failed']} | {result['skipped']} |")
+
+          total_all = unit['total'] + integration['total'] + functional['total']
+          failed_all = unit['failed'] + integration['failed'] + functional['failed']
+
+          lines.append("")
+          if failed_all == 0:
+              lines.append(f"**All {total_all} tests passed!**")
+          else:
+              lines.append(f"**{failed_all} of {total_all} tests failed.**")
+
+          # Save test results for later merging with coverage
+          test_results = '\n'.join(lines)
+          with open('test-report.md', 'w') as f:
+              f.write(test_results)
+
+          print(test_results)
+          EOF
+
+      - name: Generate Coverage Reports
+        run: |
+          # Generate unit test only report
+          ./gradlew jacocoTestReport
+          # Generate integration test only report
+          ./gradlew jacocoIntegrationReport
+          # Generate functional test only report
+          ./gradlew jacocoFunctionalReport
+          # Generate full report (unit + integration + functional)
+          ./gradlew jacocoFullReport
+
+      - name: Debug Coverage Reports
         if: github.event_name == 'pull_request'
-        continue-on-error: true
+        run: |
+          echo "=== Unit Test Report ==="
+          ls -la build/reports/jacoco/test/ || true
+          echo ""
+          echo "=== Integration Test Report ==="
+          ls -la build/reports/jacoco/jacocoIntegrationReport/ || true
+          echo ""
+          echo "=== Functional Test Report ==="
+          ls -la build/reports/jacoco/jacocoFunctionalReport/ || true
+          echo ""
+          echo "=== Full Report ==="
+          ls -la build/reports/jacoco/jacocoFullReport/ || true
+
+      - name: Parse Coverage Report
+        if: github.event_name == 'pull_request'
+        id: coverage
+        run: |
+          python3 << 'EOF'
+          import xml.etree.ElementTree as ET
+          import os
+          
+          def parse_coverage(xml_path):
+              """Parse JaCoCo XML and return dict of package_name -> coverage_pct"""
+              try:
+                  tree = ET.parse(xml_path)
+                  root = tree.getroot()
+                  
+                  # Overall coverage
+                  total_missed = 0
+                  total_covered = 0
+                  for counter in root.findall('counter'):
+                      if counter.get('type') == 'INSTRUCTION':
+                          total_missed += int(counter.get('missed', 0))
+                          total_covered += int(counter.get('covered', 0))
+                  
+                  overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
+                  
+                  # Package level - return as dict for easy comparison
+                  packages = {}
+                  for pkg in root.findall('package'):
+                      name = pkg.get('name', '').replace('/', '.')
+                      missed = 0
+                      covered = 0
+                      for counter in pkg.findall('counter'):
+                          if counter.get('type') == 'INSTRUCTION':
+                              missed += int(counter.get('missed', 0))
+                              covered += int(counter.get('covered', 0))
+                      if missed + covered > 0:
+                          pct = covered / (missed + covered) * 100
+                          packages[name] = pct
+                  
+                  return overall, packages
+              except Exception as e:
+                  print(f"Error parsing {xml_path}: {e}")
+                  return 0.0, {}
+          
+          def get_status_emoji(pct):
+              if pct >= 70:
+                  return "🟢"
+              elif pct >= 50:
+                  return "🟡"
+              else:
+                  return "🔴"
+          
+          # Parse all coverage reports
+          unit_overall, unit_packages = parse_coverage('build/reports/jacoco/test/jacocoTestReport.xml')
+          integration_overall, integration_packages = parse_coverage('build/reports/jacoco/jacocoIntegrationReport/jacocoIntegrationReport.xml')
+          functional_overall, functional_packages = parse_coverage('build/reports/jacoco/jacocoFunctionalReport/jacocoFunctionalReport.xml')
+          full_overall, full_packages = parse_coverage('build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml')
+          
+          # Get all unique package names
+          all_packages = sorted(set(unit_packages.keys()) | set(integration_packages.keys()) | set(functional_packages.keys()))
+          
+          # Generate markdown
+          lines = []
+          lines.append("## 📊 Coverage Report")
+          lines.append("")
+          lines.append("| Test Scope | Coverage | What It Tests |")
+          lines.append("|------------|----------|---------------|")
+          lines.append(f"| Unit Tests | {get_status_emoji(unit_overall)} {unit_overall:.1f}% | Service, Aspect, Repository (with mocks) |")
+          lines.append(f"| Integration Tests | {get_status_emoji(integration_overall)} {integration_overall:.1f}% | Component interaction, real HTTP calls |")
+          lines.append(f"| Functional Tests | {get_status_emoji(functional_overall)} {functional_overall:.1f}% | End-to-end HTTP flow |")
+          lines.append(f"| **Combined** | **{get_status_emoji(full_overall)} {full_overall:.1f}%** | **All layers** |")
+          lines.append("")
+          
+          # Comparison table: show coverage by test type per package
+          lines.append("### 📋 Coverage by Test Type (per package)")
+          lines.append("")
+          lines.append("| Package | Unit | Integration | Functional | Combined |")
+          lines.append("|---------|------|-------------|------------|----------|")
+          
+          for pkg in all_packages:
+              unit_pct = unit_packages.get(pkg, 0)
+              int_pct = integration_packages.get(pkg, 0)
+              func_pct = functional_packages.get(pkg, 0)
+              full_pct = full_packages.get(pkg, 0)
+              
+              # Show delta if higher-level tests improved coverage
+              unit_str = f"{unit_pct:.0f}%" if unit_pct > 0 else "-"
+              int_str = f"+{int_pct - unit_pct:.0f}%" if int_pct > unit_pct else (f"{int_pct:.0f}%" if int_pct > 0 else "-")
+              func_str = f"+{func_pct - max(unit_pct, int_pct):.0f}%" if func_pct > max(unit_pct, int_pct) else (f"{func_pct:.0f}%" if func_pct > 0 else "-")
+              full_str = f"{full_pct:.0f}%"
+              
+              lines.append(f"| {pkg} | {unit_str} | {int_str} | {func_str} | {get_status_emoji(full_pct)} {full_str} |")
+          
+          lines.append("")
+          lines.append("**Legend:** `+X%` = additional coverage from this test type")
+          lines.append("")
+          
+          # Show which packages are uniquely covered by each test type
+          unit_only = [p for p in all_packages if p in unit_packages and p not in integration_packages and p not in functional_packages]
+          int_better = [p for p in all_packages if p in integration_packages and (p not in unit_packages or integration_packages[p] > unit_packages.get(p, 0))]
+          func_better = [p for p in all_packages if p in functional_packages and (p not in unit_packages or functional_packages[p] > unit_packages.get(p, 0))]
+          
+          if int_better:
+              lines.append(f"**🎯 Integration Tests uniquely cover:** {', '.join(int_better[:5])}{'...' if len(int_better) > 5 else ''}")
+              lines.append("")
+          
+          if func_better:
+              lines.append(f"**🎯 Functional Tests uniquely cover:** {', '.join(func_better[:5])}{'...' if len(func_better) > 5 else ''}")
+              lines.append("")
+          
+          # Run info
+          run_id = os.environ.get('GITHUB_RUN_ID', 'unknown')
+          run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"
+          lines.append(f"*Report updated by [CI Run #{run_id}]({run_url})*")
+          
+          with open('coverage-comment.md', 'w') as f:
+              f.write('\n'.join(lines))
+          
+          print(f"overall={full_overall:.1f}")
+          EOF
+          # Extract combined coverage from the summary table
+          # Look for "| **Combined** | **🟢 85.1%** |" pattern
+          COVERAGE=$(grep "Combined" coverage-comment.md | grep -o '[0-9.]*%' | head -1 | sed 's/%//')
+          if [ -z "$COVERAGE" ]; then
+            COVERAGE="0"
+          fi
+          echo "overall=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "Extracted coverage: $COVERAGE%"
+
+      - name: Merge Test Results and Coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Merging test results and coverage report..."
+          cat test-report.md > combined-report.md
+          echo "" >> combined-report.md
+          cat coverage-comment.md >> combined-report.md
+
+      - name: Post Combined Report
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          paths: build/reports/jacoco/test/jacocoTestReport.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 70
-          min-coverage-changed-files: 70
-          title: 'Coverage Report'
-          update-comment: true
-          fail-on-coverage-less-than-min: true
+          header: ci-report
+          path: combined-report.md
+          recreate: true
+
+      - name: Fail if Coverage Low
+        if: github.event_name == 'pull_request' && steps.coverage.outputs.overall < 70
+        run: |
+          echo "Coverage ${{ steps.coverage.outputs.overall }} is below 70%"
+          exit 1
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: build/reports/jacoco/test/html/
+          path: build/reports/jacoco/jacocoFullReport/html/
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
@@ -78,3 +312,7 @@ jobs:
           l_max_size: 1000
           xl_label: 'size/xl'
           fail_if_xl: false
+
+      - name: Stop Bank Simulator
+        if: always()
+        run: docker stop bank-simulator && docker rm bank-simulator

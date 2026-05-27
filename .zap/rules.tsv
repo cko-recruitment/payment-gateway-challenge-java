@@ -1,0 +1,102 @@
+# ZAP Rule Configuration
+# Format: rule_id\tthreshold\tconfidence
+# Threshold: IGNORE, INFO, LOW, MEDIUM, HIGH
+# Confidence: LOW, MEDIUM, HIGH, CONFIRMED
+
+# Ignore informational findings in CI
+10010	IGNORE	LOW	# Informational: No Anti-CSRF Tokens
+10011	IGNORE	LOW	# Informational: Cookie Without Secure Flag
+10015	IGNORE	LOW	# Informational: Incomplete or No Cache-control
+10016	IGNORE	LOW	# Informational: Web Browser XSS Protection
+10017	IGNORE	LOW	# Informational: Cross-Domain JavaScript Source File
+10019	IGNORE	LOW	# Informational: Content-Type Header Missing
+10020	IGNORE	LOW	# Informational: X-Frame-Options Header
+10021	IGNORE	LOW	# Informational: X-Content-Type-Options Header
+10023	IGNORE	LOW	# Informational: Information Disclosure - Debug Error Messages
+10024	IGNORE	LOW	# Informational: Information Disclosure - Sensitive Information in URL
+10025	IGNORE	LOW	# Informational: Information Disclosure - Sensitive Information in HTTP Referrer Header
+10026	IGNORE	LOW	# Informational: HTTP Parameter Override
+10027	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10028	IGNORE	LOW	# Informational: Open Redirect
+10029	IGNORE	LOW	# Informational: Cookie Poisoning
+10030	IGNORE	LOW	# Informational: User Controllable Charset
+10031	IGNORE	LOW	# Informational: User Controllable HTML Element Attribute (Potential XSS)
+10032	IGNORE	LOW	# Informational: Viewstate
+10033	IGNORE	LOW	# Informational: Directory Browsing
+10034	IGNORE	LOW	# Informational: Heartbleed OpenSSL Vulnerability
+10035	IGNORE	LOW	# Informational: Strict-Transport-Security Header
+10036	IGNORE	LOW	# Informational: HTTP Server Response Header
+10037	IGNORE	LOW	# Informational: Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
+10038	IGNORE	LOW	# Informational: Content Security Policy (CSP) Header Not Set
+10039	IGNORE	LOW	# Informational: X-Backend-Server Header Information Leak
+10040	IGNORE	LOW	# Informational: Secure Pages Include Mixed Content
+10041	IGNORE	LOW	# Informational: HTTP to HTTPS Insecure Transition in Form Post
+10042	IGNORE	LOW	# Informational: HTTPS to HTTP Insecure Transition in Form Post
+10043	IGNORE	LOW	# Informational: User Controllable JavaScript Event (XSS)
+10044	IGNORE	LOW	# Informational: Big Redirect Detected (Potential Sensitive Information Leak)
+10045	IGNORE	LOW	# Informational: X-SourceMap Header Found
+10046	IGNORE	LOW	# Informational: Insecure Component
+10047	IGNORE	LOW	# Informational: HTTPS Content Available via HTTP
+10048	IGNORE	LOW	# Informational: Remote Code Execution - Shell Shock
+10049	IGNORE	LOW	# Informational: Content Cacheability
+10050	IGNORE	LOW	# Informational: Retrieved from Cache
+10051	IGNORE	LOW	# Informational: Relative Path Confusion
+10052	IGNORE	LOW	# Informational: X-ChromeLogger-Data (XCOLD) Header Information Leak
+10053	IGNORE	LOW	# Informational: Apache Range Header DoS (CVE-2011-3192)
+10054	IGNORE	LOW	# Informational: Cookie without SameSite Attribute
+10055	IGNORE	LOW	# Informational: Content Security Policy (CSP) Report-Only Header
+10056	IGNORE	LOW	# Informational: X-Debug-Token Information Leak
+10057	IGNORE	LOW	# Informational: Username Hash Found
+10058	IGNORE	LOW	# Informational: Link Target Identified
+10059	IGNORE	LOW	# Informational: Server Leaks Version Information via "Server" HTTP Response Header Field
+10060	IGNORE	LOW	# Informational: Server Leaks Information via "X-AspNet-Version"/"X-AspNetMvc-Version" HTTP Response Header Field(s)
+10061	IGNORE	LOW	# Informational: Server Leaks Information via "X-Generator" HTTP Response Header Field
+10062	IGNORE	LOW	# Informational: Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
+10063	IGNORE	LOW	# Informational: Feature Policy Header Not Set
+10064	IGNORE	LOW	# Informational: Private IP Disclosure
+10065	IGNORE	LOW	# Informational: Backup File Disclosure
+10066	IGNORE	LOW	# Informational: Cross-Domain Misconfiguration
+10067	IGNORE	LOW	# Informational: Authentication Request Identified
+10068	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10069	IGNORE	LOW	# Informational: Insufficient Site Isolation Against Spectre Vulnerability
+10070	IGNORE	LOW	# Informational: Insufficient Site Isolation Against Spectre Vulnerability
+10071	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10072	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10073	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10074	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10075	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10076	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10077	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10078	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10079	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10080	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10081	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10082	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10083	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10084	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10085	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10086	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10087	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10088	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10089	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10090	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10091	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10092	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10093	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10094	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10095	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10096	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10097	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10098	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10099	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10100	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10101	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10102	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10103	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10104	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10105	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10106	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10107	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10108	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10109	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments
+10110	IGNORE	LOW	# Informational: Information Disclosure - Suspicious Comments

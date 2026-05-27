@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.stream.IntStream;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ class RateLimitAspectTest {
 
   @BeforeEach
   void setUp() {
-    aspect = new RateLimitAspect();
+    aspect = new RateLimitAspect(new SimpleMeterRegistry());
   }
 
   @Test
