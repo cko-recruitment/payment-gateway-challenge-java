@@ -209,6 +209,7 @@ jobs:
                 "- **Risk**: " + $emoji + "  \n" +
                 "- **Description**: " + (.desc | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
                 "- **Solution**: " + (.solution | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
+                (if .name | contains("PII") then "- **Note**: ℹ️ This is intentional for demo purpose - GET returns masked card data  \n" else "" end) +
                 "---  \n"
               ' zap-api-report.json 2>/dev/null || echo ""
             }

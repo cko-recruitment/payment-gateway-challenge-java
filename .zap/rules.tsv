@@ -51,7 +51,7 @@
 10059	IGNORE	LOW	# Informational: Server Leaks Version Information via "Server" HTTP Response Header Field
 10060	IGNORE	LOW	# Informational: Server Leaks Information via "X-AspNet-Version"/"X-AspNetMvc-Version" HTTP Response Header Field(s)
 10061	IGNORE	LOW	# Informational: Server Leaks Information via "X-Generator" HTTP Response Header Field
-10062	IGNORE	LOW	# PII Disclosure - Intentional for demo: GET returns masked card data
+10062	IGNORE	LOW	# Informational: Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
 10063	IGNORE	LOW	# Informational: Feature Policy Header Not Set
 10064	IGNORE	LOW	# Informational: Private IP Disclosure
 10065	IGNORE	LOW	# Informational: Backup File Disclosure
