@@ -45,186 +45,34 @@ lsof -i :8080 || echo "Port 8080 is free"
 
 All responses return HTTP 200. Business result is in the JSON body.
 
-### Step 1: Start the Application
+### Start Application
 
 ```bash
-# Option 1: Docker Compose (Recommended - starts both app and bank simulator)
 docker-compose up --build
-
-# Option 2: Manual start
-# Terminal 1: Start bank simulator
-docker run -d --name bank-simulator \
-  -p 8080:8080 \
-  -v $(pwd)/imposters:/imposters \
-  bbyars/mountebank:2.8.1 \
-  --configfile /imposters/bank_simulator.ejs --allowInjection
-
-# Wait for bank simulator
-sleep 5
-
-# Terminal 2: Start application
-./gradlew bootRun
 ```
 
-### Step 2: Test Successful Payment
+### Demo Steps (use `demo.http` in VS Code)
 
-Open `demo.http` in VS Code, find **Step2_SuccessPayment**, click **Send Request**.
+| Step | Request | What to Show |
+|-----|---------|-------------|
+| 2 | `Step2_SuccessPayment` | SUCCESS, id, links |
+| 3 | `Step3_CacheHit` | Same id = cache hit |
+| 4 | `Step4_ValidationError` | INVALID_REQUEST, action=fix_request |
+| 5 | `Step5_ValidationCacheHit` | Same createdAt = cached |
+| 6 | `Step6_RetriableError` | BANK_ERROR, action=retry |
+| 7 | `Step7_RetryAgain` | createdAt < updatedAt = retried |
+| 9 | `Step9_GetById` | Retrieve by payment ID |
+| 10 | `Step10_GetByIdempotencyKey` | Retrieve by dedupe key |
 
-Or use curl:
-```bash
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: key-1" \
-  -d '{"card_number":"4242424242424241","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq .
-```
+### Idempotency Tracing
 
-**Expected Response:**
-```json
-{
-  "code": "SUCCESS",
-  "description": "Payment authorized successfully",
-  "action": "none",
-  "links": [
-    { "rel": "self", "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000", "method": "GET" },
-    { "rel": "idempotency", "href": "/api/v1/payments/idempotency/key-1", "method": "GET" }
-  ],
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "Authorized",
-  "cardNumberLastFour": 4241,
-  "expiryMonth": 12,
-  "expiryYear": 2027,
-  "currency": "USD",
-  "amount": 100
-}
-```
-
-### Step 3: Test Validation Error (Still HTTP 200)
-
-In `demo.http`: **Step4_ValidationError** → Send Request
-
-```bash
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: key-2" \
-  -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq .
-```
-
-**Expected Response:**
-```json
-{
-  "code": "INVALID_REQUEST",
-  "description": "Card number must be between 14 and 19 digits; Card number must only contain numeric characters",
-  "action": "fix_request",
-  "links": [
-    { "rel": "self", "href": "/api/v1/payments", "method": "POST" }
-  ],
-  "status": "Rejected"
-}
-```
-
-### Step 4: Test Idempotency
-
-Use `createdAt` and `updatedAt` to trace request history:
-- `createdAt == updatedAt` → First attempt or cached non-retriable
-- `createdAt < updatedAt` → Retried (bank called again)
-
-**Non-Retriable Error** (action=fix_request) - Cached forever:
-
-In `demo.http`: **Step4_ValidationError** then **Step5_ValidationCacheHit**
-
-```bash
-# First request - validation error, cached
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: demo-validation" \
-  -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{createdAt, updatedAt, code, action}'
-# → createdAt == updatedAt (first attempt)
-
-# Same key - returns cached error (no retry)
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: demo-validation" \
-  -d '{"card_number":"abc","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{createdAt, updatedAt, code, action}'
-# → createdAt == updatedAt (cached, same timestamps)
-```
-
-**Retriable Error** (action=retry) - Retried on next request:
-
-In `demo.http`: **Step6_RetriableError** then **Step7_RetryAgain**
-
-```bash
-# First request - bank returns 503, action=retry
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: demo-retry" \
-  -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{createdAt, updatedAt, code, action}'
-# → createdAt == updatedAt (first attempt)
-
-# Same key - retries bank call (bank still down)
-curl -s http://localhost:8090/api/v1/payments \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Merchant-Id: merchant-123" \
-  -H "Idempotency-Key: demo-retry" \
-  -d '{"card_number":"4242424242424240","expiry_month":12,"expiry_year":2027,"currency":"USD","amount":100,"cvv":"123"}' \
-  | jq '{createdAt, updatedAt, code, action}'
-# → createdAt < updatedAt (retried! updatedAt changed)
-```
-
-### Step 5: Retrieve Payment by ID
-
-In `demo.http`: **Step9_GetById** → Send Request
-
-```bash
-# Use the id from Step 2
-curl -s http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-446655440000 \
-  -H "Merchant-Id: merchant-123" \
-  | jq .
-```
-
-**Expected Response:**
-```json
-{
-  "code": "SUCCESS",
-  "description": "Payment authorized successfully",
-  "action": "none",
-  "links": [
-    { "rel": "self", "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000", "method": "GET" }
-  ],
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "Authorized",
-  "cardNumberLastFour": 4241,
-  "expiryMonth": 12,
-  "expiryYear": 2027,
-  "currency": "USD",
-  "amount": 100
-}
-```
-
-### Step 6: Retrieve Payment by Idempotency Key
-
-In `demo.http`: **Step10_GetByIdempotencyKey** → Send Request
-
-```bash
-curl -s http://localhost:8090/api/v1/payments/idempotency/key-1 \
-  -H "Merchant-Id: merchant-123" \
-  | jq .
-```
+| Scenario | createdAt | updatedAt | Meaning |
+|---------|-----------|-----------|---------|
+| First success | 10:00:00 | 10:00:00 | New payment |
+| Cache hit | 10:00:00 | 10:00:00 | Returned from cache |
+| First 503 | 10:00:00 | 10:00:00 | Bank down, cached error |
+| Retry 503 | 10:00:00 | 10:00:05 | Bank called again, still down |
+| Retry success | 10:00:00 | 10:00:05 | Bank called again, now OK |
 
 ---
 
