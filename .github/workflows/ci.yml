@@ -261,8 +261,9 @@ jobs:
           
           print(f"overall={full_overall:.1f}")
           EOF
-          # Extract percentage number for step output (last percentage in file = Combined)
-          COVERAGE=$(grep -o '[0-9.]*%' coverage-comment.md | tail -1 | sed 's/%//')
+          # Extract combined coverage from the summary table
+          # Look for "| **Combined** | **🟢 85.1%** |" pattern
+          COVERAGE=$(grep "Combined" coverage-comment.md | grep -o '[0-9.]*%' | head -1 | sed 's/%//')
           if [ -z "$COVERAGE" ]; then
             COVERAGE="0"
           fi
