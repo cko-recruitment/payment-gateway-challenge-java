@@ -104,6 +104,11 @@ public void checkLimit(...) { }
 └─────────────────────────────────────────┘
 ```
 
+**K8s Reliability Features:**
+- **HPA**: Horizontal Pod Autoscaler (scale based on CPU/memory)
+- **PDB**: Pod Disruption Budget (ensure min available during updates)
+- **Probes**: Liveness + readiness for traffic management
+
 ### Infrastructure as Code
 
 ```hcl
@@ -123,6 +128,37 @@ module "eks" {
 - China users → Aliyun (Beijing/Shanghai)
 - Global users → AWS (Singapore/Frankfurt)
 - Data residency compliance per region
+
+### GitOps with ArgoCD
+
+```yaml
+# k8s/gitops/argocd-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-gateway
+spec:
+  source:
+    repoURL: https://github.com/james-yz-xie/payment-gateway-challenge-java
+    path: k8s/overlays/prod
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+```
+
+**Benefits:**
+- Declarative continuous delivery
+- Automated sync and self-healing
+- Git as single source of truth
+
+### Deployment Strategies
+
+| Strategy | Use Case | Implementation |
+|----------|----------|----------------|
+| **Rolling Update** | Standard deployment | Kubernetes default |
+| **Canary** | Risky releases | Istio traffic split (1% → 100%) |
+| **Rollback** | Incident recovery | `kubectl rollout undo` or Git revert |
 
 ---
 
