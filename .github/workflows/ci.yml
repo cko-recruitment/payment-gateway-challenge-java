@@ -103,18 +103,13 @@ jobs:
           else:
               lines.append(f"**{failed_all} of {total_all} tests failed.**")
 
+          # Save test results for later merging with coverage
+          test_results = '\n'.join(lines)
           with open('test-report.md', 'w') as f:
-              f.write('\n'.join(lines))
+              f.write(test_results)
 
-          print('\n'.join(lines))
+          print(test_results)
           EOF
-
-      - name: Post Test Report
-        if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: test-results
-          path: test-report.md
 
       - name: Generate Coverage Reports
         run: |
@@ -270,12 +265,20 @@ jobs:
           echo "overall=$COVERAGE" >> $GITHUB_OUTPUT
           echo "Extracted coverage: $COVERAGE%"
 
-      - name: Post Coverage Comment
+      - name: Merge Test Results and Coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Merging test results and coverage report..."
+          cat test-report.md > combined-report.md
+          echo "" >> combined-report.md
+          cat coverage-comment.md >> combined-report.md
+
+      - name: Post Combined Report
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: coverage
-          path: coverage-comment.md
+          header: ci-report
+          path: combined-report.md
           recreate: true
 
       - name: Fail if Coverage Low
