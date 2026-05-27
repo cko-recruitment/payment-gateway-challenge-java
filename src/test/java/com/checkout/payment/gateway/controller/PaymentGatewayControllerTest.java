@@ -61,8 +61,8 @@ class PaymentGatewayControllerTest {
     payment.setExpiryYear(2024);
     payment.setCardNumberLastFour(4321);
 
-    when(paymentGatewayService.getPaymentByDedupeKey("merchant-123", "dedupe-abc"))
-        .thenReturn(Optional.of(payment));
+    when(paymentGatewayService.processPayment(anyString(), any(PostPaymentRequest.class), anyString()))
+        .thenReturn(payment);
 
     mvc.perform(post("/api/v1/payments")
             .header("Merchant-Id", "merchant-123")
