@@ -9,5 +9,7 @@ resources:
   - hpa.yaml
   - pdb.yaml
 
-commonLabels:
-  app: payment-gateway
+labels:
+  - includeSelectors: true
+    pairs:
+      app: payment-gateway
