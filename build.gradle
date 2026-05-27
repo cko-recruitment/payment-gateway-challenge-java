@@ -142,6 +142,78 @@ jacocoTestCoverageVerification {
     }
 }
 
+// Integration test only coverage report
+task jacocoIntegrationReport(type: JacocoReport) {
+    group = 'verification'
+    description = 'Generates coverage report from integration tests only'
+    
+    dependsOn integrationTest
+    
+    executionData(
+        fileTree(project.buildDir).include("**/jacoco/integrationTest.exec")
+    )
+    
+    sourceSets sourceSets.main
+    
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                'com/checkout/payment/gateway/controller/PaymentGatewayApi.class',
+                'com/checkout/payment/gateway/model/**',
+                'com/checkout/payment/gateway/enums/**',
+                'com/checkout/payment/gateway/exception/**',
+                'com/checkout/payment/gateway/configuration/**',
+                'com/checkout/payment/gateway/PaymentGatewayApplication.class',
+                'com/checkout/payment/gateway/aspect/Metrics.class',
+                'com/checkout/payment/gateway/aspect/RateLimiter.class',
+                'com/checkout/payment/gateway/security/SecureLogger.class'
+            ])
+        }))
+    }
+}
+
+// Functional test only coverage report
+task jacocoFunctionalReport(type: JacocoReport) {
+    group = 'verification'
+    description = 'Generates coverage report from functional tests only'
+    
+    dependsOn functionalTest
+    
+    executionData(
+        fileTree(project.buildDir).include("**/jacoco/functionalTest.exec")
+    )
+    
+    sourceSets sourceSets.main
+    
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                'com/checkout/payment/gateway/controller/PaymentGatewayApi.class',
+                'com/checkout/payment/gateway/model/**',
+                'com/checkout/payment/gateway/enums/**',
+                'com/checkout/payment/gateway/exception/**',
+                'com/checkout/payment/gateway/configuration/**',
+                'com/checkout/payment/gateway/PaymentGatewayApplication.class',
+                'com/checkout/payment/gateway/aspect/Metrics.class',
+                'com/checkout/payment/gateway/aspect/RateLimiter.class',
+                'com/checkout/payment/gateway/security/SecureLogger.class'
+            ])
+        }))
+    }
+}
+
 // Unified coverage report including unit + integration + functional tests
 task jacocoFullReport(type: JacocoReport) {
     group = 'verification'

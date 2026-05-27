@@ -120,6 +120,10 @@ jobs:
         run: |
           # Generate unit test only report
           ./gradlew jacocoTestReport
+          # Generate integration test only report
+          ./gradlew jacocoIntegrationReport
+          # Generate functional test only report
+          ./gradlew jacocoFunctionalReport
           # Generate full report (unit + integration + functional)
           ./gradlew jacocoFullReport
 
@@ -128,6 +132,12 @@ jobs:
         run: |
           echo "=== Unit Test Report ==="
           ls -la build/reports/jacoco/test/ || true
+          echo ""
+          echo "=== Integration Test Report ==="
+          ls -la build/reports/jacoco/jacocoIntegrationReport/ || true
+          echo ""
+          echo "=== Functional Test Report ==="
+          ls -la build/reports/jacoco/jacocoFunctionalReport/ || true
           echo ""
           echo "=== Full Report ==="
           ls -la build/reports/jacoco/jacocoFullReport/ || true
@@ -142,35 +152,39 @@ jobs:
           
           def parse_coverage(xml_path):
               """Parse JaCoCo XML and return (overall_pct, packages_list)"""
-              tree = ET.parse(xml_path)
-              root = tree.getroot()
-              
-              # Overall coverage
-              total_missed = 0
-              total_covered = 0
-              for counter in root.findall('counter'):
-                  if counter.get('type') == 'INSTRUCTION':
-                      total_missed += int(counter.get('missed', 0))
-                      total_covered += int(counter.get('covered', 0))
-              
-              overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
-              
-              # Package level
-              packages = []
-              for pkg in root.findall('package'):
-                  name = pkg.get('name', '').replace('/', '.')
-                  missed = 0
-                  covered = 0
-                  for counter in pkg.findall('counter'):
+              try:
+                  tree = ET.parse(xml_path)
+                  root = tree.getroot()
+                  
+                  # Overall coverage
+                  total_missed = 0
+                  total_covered = 0
+                  for counter in root.findall('counter'):
                       if counter.get('type') == 'INSTRUCTION':
-                          missed += int(counter.get('missed', 0))
-                          covered += int(counter.get('covered', 0))
-                  if missed + covered > 0:
-                      pct = covered / (missed + covered) * 100
-                      packages.append((name, pct, missed + covered))
-              
-              packages.sort(key=lambda x: x[1])
-              return overall, packages
+                          total_missed += int(counter.get('missed', 0))
+                          total_covered += int(counter.get('covered', 0))
+                  
+                  overall = total_covered / (total_missed + total_covered) * 100 if (total_missed + total_covered) > 0 else 0
+                  
+                  # Package level
+                  packages = []
+                  for pkg in root.findall('package'):
+                      name = pkg.get('name', '').replace('/', '.')
+                      missed = 0
+                      covered = 0
+                      for counter in pkg.findall('counter'):
+                          if counter.get('type') == 'INSTRUCTION':
+                              missed += int(counter.get('missed', 0))
+                              covered += int(counter.get('covered', 0))
+                      if missed + covered > 0:
+                          pct = covered / (missed + covered) * 100
+                          packages.append((name, pct, missed + covered))
+                  
+                  packages.sort(key=lambda x: x[1])
+                  return overall, packages
+              except Exception as e:
+                  print(f"Error parsing {xml_path}: {e}")
+                  return 0.0, []
           
           def format_coverage_table(packages, title):
               """Format package coverage as markdown table"""
@@ -179,6 +193,10 @@ jobs:
               lines.append("")
               lines.append("| Package | Coverage | Lines |")
               lines.append("|---------|----------|-------|")
+              
+              if not packages:
+                  lines.append("| *No coverage data* | - | - |")
+                  return lines
               
               for name, pct, total in packages[:20]:
                   status = "🟢" if pct >= 70 else "🟡" if pct >= 50 else "🔴"
@@ -189,10 +207,10 @@ jobs:
               
               return lines
           
-          # Parse unit test coverage
+          # Parse all coverage reports
           unit_overall, unit_packages = parse_coverage('build/reports/jacoco/test/jacocoTestReport.xml')
-          
-          # Parse full coverage (unit + integration + functional)
+          integration_overall, integration_packages = parse_coverage('build/reports/jacoco/jacocoIntegrationReport/jacocoIntegrationReport.xml')
+          functional_overall, functional_packages = parse_coverage('build/reports/jacoco/jacocoFunctionalReport/jacocoFunctionalReport.xml')
           full_overall, full_packages = parse_coverage('build/reports/jacoco/jacocoFullReport/jacocoFullReport.xml')
           
           # Generate markdown
@@ -201,16 +219,22 @@ jobs:
           lines.append("")
           lines.append("| Test Scope | Coverage |")
           lines.append("|------------|----------|")
-          lines.append(f"| Unit Tests Only | {unit_overall:.1f}% |")
-          lines.append(f"| Unit + Integration + Functional | {full_overall:.1f}% |")
+          lines.append(f"| Unit Tests | {unit_overall:.1f}% |")
+          lines.append(f"| Integration Tests | {integration_overall:.1f}% |")
+          lines.append(f"| Functional Tests | {functional_overall:.1f}% |")
+          lines.append(f"| **Combined (All)** | **{full_overall:.1f}%** |")
           lines.append("")
           
           # Unit test package detail
           lines.extend(format_coverage_table(unit_packages, f"📋 Unit Test Package Detail ({unit_overall:.1f}%)"))
           lines.append("")
           
-          # Full test package detail
-          lines.extend(format_coverage_table(full_packages, f"📋 Full Test Package Detail ({full_overall:.1f}%)"))
+          # Integration test package detail
+          lines.extend(format_coverage_table(integration_packages, f"📋 Integration Test Package Detail ({integration_overall:.1f}%)"))
+          lines.append("")
+          
+          # Functional test package detail
+          lines.extend(format_coverage_table(functional_packages, f"📋 Functional Test Package Detail ({functional_overall:.1f}%)"))
           lines.append("")
           
           # Run info
@@ -224,7 +248,7 @@ jobs:
           print(f"overall={full_overall:.1f}")
           EOF
           # Extract percentage number for step output
-          echo "overall=$(sed -n 's/.*Full Test Package Detail (\([0-9.]*\)%).*/\1/p' coverage-comment.md)" >> $GITHUB_OUTPUT
+          echo "overall=$(sed -n 's/.*Combined (All).*|\*\([0-9.]*\)%\*.*/\1/p' coverage-comment.md)" >> $GITHUB_OUTPUT
 
       - name: Post Coverage Comment
         if: github.event_name == 'pull_request'
