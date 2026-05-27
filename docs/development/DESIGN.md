@@ -204,7 +204,16 @@ public PostPaymentResponse processPayment(String merchantId, ..., String dedupeK
 ./gradlew test
 
 # Integration tests (requires bank simulator)
-docker run -d --name bank-simulator -p 8080:8080 bbyars/mountebank:2.8.1
+docker run -d --name bank-simulator \
+  -p 2525:2525 -p 8080:8080 \
+  -v $(pwd)/imposters:/imposters \
+  bbyars/mountebank:2.8.1 \
+  --configfile /imposters/bank_simulator.ejs --allowInjection
+
+# Wait for bank simulator to be ready
+sleep 5
+curl -f http://localhost:2525/imposters || echo "Bank simulator failed to start"
+
 ./gradlew integrationTest
 
 # Functional tests (full stack)
