@@ -46,6 +46,8 @@ jobs:
       # OWASP Dependency-Check - Scan for known vulnerabilities in dependencies
       - name: OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
         with:
           project: 'payment-gateway'
           path: '.'
