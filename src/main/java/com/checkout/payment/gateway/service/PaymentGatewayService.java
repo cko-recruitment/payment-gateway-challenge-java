@@ -68,8 +68,12 @@ public class PaymentGatewayService {
       // Double-check after acquiring lock
       Optional<PostPaymentResponse> existing = idempotencyRepository.getByKey(merchantId, dedupeKey);
       if (existing.isPresent()) {
-        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
-        return existing.get();
+        PostPaymentResponse cached = existing.get();
+        if (!isRetriable(cached)) {
+          secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
+          return cached;
+        }
+        secureLogger.info("Previous attempt was retriable for merchant={}, key={}, retrying", merchantId, dedupeKey);
       }
 
       try {
@@ -100,6 +104,10 @@ public class PaymentGatewayService {
       lock.unlock();
       locks.remove(lockKey);
     }
+  }
+
+  private boolean isRetriable(PostPaymentResponse response) {
+    return "retry".equals(response.getAction());
   }
 
   private List<String> validateRequest(PostPaymentRequest request) {
