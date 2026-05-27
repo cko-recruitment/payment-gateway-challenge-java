@@ -1,0 +1,30 @@
+# Nginx Ingress Session Affinity
+# Alternative to Istio for simple sticky session
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: payment-gateway
+  namespace: payment-gateway
+  annotations:
+    # Nginx sticky session via cookie
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "payment_session"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+    # Hash based on IP (alternative)
+    # nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: payment.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: payment-gateway
+                port:
+                  number: 80

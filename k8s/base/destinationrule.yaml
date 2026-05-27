@@ -1,0 +1,36 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: payment-gateway
+  namespace: payment-gateway
+spec:
+  host: payment-gateway
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+      # Session affinity: same user → same pod
+      consistentHash:
+        httpHeaderName: x-user-id
+        # 或者基于 cookie
+        # httpCookie:
+        #   name: session
+        #   ttl: 0s
+    # Connection pool settings
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    # Outlier detection (circuit breaker)
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
