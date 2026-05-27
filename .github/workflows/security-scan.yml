@@ -164,6 +164,7 @@ jobs:
           rules_file_name: '.zap/rules.tsv'
           cmd_options: '-a'
           allow_issue_writing: false
+          artifact_name: ''  # Disable automatic artifact upload
 
       - name: Parse ZAP Results
         if: always()

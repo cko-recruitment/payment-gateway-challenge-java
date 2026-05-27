@@ -24,7 +24,11 @@ public class BankSimulatorHealthIndicator implements HealthIndicator {
         return Health.up().withDetail("bank", host + ":" + port + " reachable").build();
       }
     } catch (Exception ex) {
-      return Health.down().withDetail("bank", "unreachable: " + ex.getMessage()).build();
+      // Return UNKNOWN instead of DOWN so app can still start
+      // Bank availability is checked at request time, not startup
+      return Health.status("UNKNOWN")
+          .withDetail("bank", "unreachable: " + ex.getMessage())
+          .build();
     }
   }
 }
