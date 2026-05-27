@@ -1,129 +1,56 @@
-# Design Considerations and Assumptions
+# Payment Gateway - Design Document
 
-## Overview
+## 1. Observability
 
-This document describes the implementation of the Payment Gateway API and the core design principles ensuring consistency, security, and developer experience.
-
----
-
-## 1. Architecture and Layering
-
-The application follows a layered architecture to ensure separation of concerns and testability:
+### Three Pillars
 
 ```
-Controller (HTTP) → Service (Business Logic) → Repository (Storage)
-       ↓                    ↓                        ↘
-  RateLimitAspect    PaymentMetricsAspect         BankClient (External API)
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│     Metrics     │  │      Logs       │  │    Tracing      │
+│                 │  │                 │  │                 │
+│  Prometheus     │  │  Structured     │  │  OpenTelemetry  │
+│  + Grafana      │  │  JSON           │  │  + Jaeger       │
+│                 │  │                 │  │                 │
+│  - Latency P99  │  │  - Masked PII   │  │  - Request flow │
+│  - Error rate   │  │  - CorrelationID│  │  - Service deps │
+│  - Throughput   │  │  - Timestamp    │  │  - Bottlenecks  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
-**Key Responsibilities (following SOLID principles):**
-- **`PaymentGatewayController`**: Thin layer for request routing and HTTP response orchestration. Maintains the "200-Only" API contract. Delegates all business logic to Service. *(Single Responsibility Principle)*
-- **`PaymentGatewayApi`**: Interface containing all OpenAPI/Swagger annotations. Separates API documentation from implementation to keep Controller readable. *(Interface Segregation Principle)*
-- **`PaymentGatewayService`**: The core engine for validation, bank interaction, and persistence orchestration. Depends on abstractions (`BankClient`, `IdempotencyRepository`) rather than concrete implementations. Handles business exceptions and converts them to domain responses. *(Dependency Inversion Principle)*
-- **`IdempotencyRepository`**: Interface defining the contract for dual-indexed storage (System ID and Idempotency Key) with merchant isolation. `InMemoryIdempotencyRepository` provides the concrete in-memory implementation. *(Interface Segregation & Liskov Substitution Principles)*
-- **`BankClient`**: Interface abstracting external bank communication, allowing the service to remain agnostic of the actual bank integration. `BankSimulatorClient` implements this for the simulator. *(Open/Closed Principle)*
+### Implementation
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Application | Micrometer + Prometheus | JVM metrics, custom business metrics |
+| Infrastructure | Grafana dashboards | Visualization, alerting |
+| Distributed | OpenTelemetry + Jaeger | End-to-end request tracing |
+
+### Key Metrics
+
+```java
+// Payment latency histogram
+@Timed(value = "payment.process", percentiles = {0.5, 0.95, 0.99})
+public PostPaymentResponse processPayment(...) { }
+
+// Rate limit counter
+@Counted(value = "rate.limit.hit")
+public void checkLimit(...) { }
+```
+
+### Health Checks
+
+```
+/actuator/health          → Overall status
+/actuator/health/liveness  → Kubernetes liveness probe
+/actuator/health/readiness → Kubernetes readiness probe
+/actuator/prometheus      → Prometheus scrape endpoint
+```
 
 ---
 
-## 2. API Design Principles
+## 2. Packaging / Hosting
 
-### Decision: The "200-Only" RESTful API
-
-To provide a superior integration experience, the API avoids varied HTTP status codes for business or system outcomes. Instead, it uses **HTTP 200 OK** for all successful transport scenarios, conveying the actual result within a structured JSON body.
-
-**Rationale:**
-- **Simplified Client Logic**: Clients only need to handle a single response parsing flow.
-- **Unified Error Model**: Every response (Success, Bank Decline, Validation Error, or System Crash) shares the same base structure.
-
-### Decision: Unified `GatewayCode` Metadata
-
-All API responses inherit from `BasePaymentResponse`, providing machine-readable outcome metadata:
-
-| Field | Description | Example |
-| :--- | :--- | :--- |
-| `code` | Unique, machine-readable outcome code. | `PAYMENT_DECLINED` |
-| `message` | Human-readable description of the result. | "Insufficient funds" |
-| `action` | Recommended client action. | `none` |
-
-**Standardized Gateway Codes:**
-- `SUCCESS`: Operation completed as requested.
-- `PAYMENT_DECLINED`: Bank refused the payment (Final state).
-- `INVALID_REQUEST`: Validation failed or missing parameters (Final state).
-- `BANK_UNAVAILABLE`: External bank downtime (Retryable).
-- `PAYMENT_NOT_FOUND`: Retrieval requested for a non-existent resource.
-- `INTERNAL_ERROR`: Unexpected gateway failure (Retryable).
-
----
-
-## 3. Retrieval Strategy
-
-### Decision: Dual Canonical URIs
-
-The API supports two complementary retrieval paths, both returning a `GetPaymentResponse`:
-
-1.  **`GET /api/v1/payments/{id}`**: Retrieval via system-generated UUID.
-2.  **`GET /api/v1/payments/idempotency/{key}`**: Retrieval via the merchant's original reference (Idempotency Key).
-
-**Contextual Security:**
-Both endpoints require the `Merchant-Id` header. Data is scoped strictly to the provided merchant, ensuring that merchants cannot retrieve each other's data even if they guess an ID or Key.
-
----
-
-## 4. Idempotency and Validation
-
-### Decision: Hardened Idempotency with Concurrent Protection
-`POST /api/v1/payments` uses the `Idempotency-Key` to ensure that duplicate requests from a merchant (e.g., due to network retries) do not result in multiple bank charges. 
-
-**Key Features:**
-- **Cached Responses**: Successful or declined responses are cached and returned for subsequent requests with the same key.
-- **Retriable Errors**: If the previous attempt failed with a retriable error (e.g., `BANK_UNAVAILABLE`), the request is reprocessed instead of returning the cached error.
-- **Concurrent Safety**: Uses `ConcurrentHashMap` with `ReentrantLock` per idempotency key to prevent race conditions when multiple identical requests arrive simultaneously.
-
-### Decision: Strict ISO 4217 Validation
-Currency validation is not merely format-based. The system utilizes `java.util.Currency` to ensure that every request contains a globally valid ISO currency code, preventing downstream failures at the bank level.
-
----
-
-## 5. Error Handling Strategy
-
-### Decision: Service Throws, Controller Translates
-
-Following clean architecture principles, error handling responsibility is split by layer:
-
-- **Service Layer**: Detects errors (validation failures, bank exceptions) and throws domain exceptions (`PaymentValidationException`, `BankProcessingException`).
-- **Controller Layer**: Catches domain exceptions and translates them into `PostPaymentResponse` with appropriate `GatewayCode`.
-
-**Rationale:**
-- **Separation of Concerns**: Service knows business rules, Controller knows HTTP contract.
-- **Testability**: Service tests verify exception throwing; Controller tests verify response mapping.
-- **Consistency**: All error responses share the same JSON structure via `PostPaymentResponse.rejected()` / `bankErrorResponse()`.
-
----
-
-## 6. Non-Functional Concerns (AOP)
-
-### Decision: Cross-Cutting Concerns via Spring AOP
-Rate limiting and metrics are implemented as aspects to avoid polluting business logic:
-
-- **`RateLimitAspect`**: Multi-granularity fixed window (1-second + 60-second) per merchant. Uses `ConcurrentHashMap` with `AtomicInteger` — **O(merchants)** memory.
-- **`PaymentMetricsAspect`**: Records payment latency and outcomes via SLF4J. Swappable for Micrometer/Prometheus later.
-
-**Why AOP:** Follows SRP/OCP. Business code does not know about rate limiting or metrics.
-
----
-
-## 7. Storage and Performance
-
-### Decision: Dual-Indexed In-Memory Repository
-The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID and Idempotency Key). This provides **O(1)** retrieval performance for all `GET` operations while keeping the architecture simple for the current scope.
-
----
-
-## 8. Containerization and Deployment
-
-### Decision: Docker-First Deployment
-
-The application is packaged as a Docker image for consistent deployment across environments:
+### Container Strategy
 
 ```
 ┌─────────────────────────────────────┐
@@ -132,154 +59,353 @@ The application is packaged as a Docker image for consistent deployment across e
 │  │  Eclipse Temurin JRE 17      │    │
 │  │  ┌─────────────────────┐    │    │
 │  │  │  Spring Boot App    │    │    │
-│  │  │  (payment-gateway)  │    │    │
+│  │  │  (Layered JAR)      │    │    │
 │  │  └─────────────────────┘    │    │
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 ```
 
-**Key Features:**
-- **Multi-stage build**: Separate build and runtime stages for smaller image size
-- **Layered JAR**: Spring Boot layered JAR for efficient Docker layer caching
-- **Health checks**: Built-in actuator endpoints for container health monitoring
-- **Non-root user**: Security best practice
+**Why Layered JAR:**
+- Dependencies layer (rarely changes) → Docker cache hit
+- Application layer (frequently changes) → Fast rebuild
 
-### Decision: Docker Compose for Local Development
+### Deployment Options
 
-```yaml
-# docker-compose.yml
-services:
-  payment-gateway:
-    build: .
-    ports:
-      - "8090:8090"
-    environment:
-      - BANK_URL=http://bank-simulator:8080/payments
-  bank-simulator:
-    image: bbyars/mountebank:2.8.1
-```
+| Environment | Tool | Configuration |
+|-------------|------|---------------|
+| Local | Docker Compose | `docker-compose.yml` |
+| Dev / Test | Kind / Minikube | `k8s/overlays/dev/` |
+| Production | EKS / ACK | `k8s/overlays/prod/` |
 
-### Decision: Kubernetes for Production
+### Kubernetes Architecture
 
 ```
-┌─────────────────────────────────────┐
-│           Kubernetes                 │
-│  ┌─────────┐  ┌─────────┐          │
-│  │  Pod 1  │  │  Pod 2  │          │
-│  │  + Envoy│  │  + Envoy│  ← Istio │
-│  └─────────┘  └─────────┘          │
-│       ↑              ↑              │
-│    Service Mesh (Istio)             │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│              Ingress                     │
+│         (TLS termination)                │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────┼───────────────────────┐
+│                 ▼                       │
+│  ┌─────────────────────────────────┐    │
+│  │     Istio Gateway                │    │
+│  │  (Traffic management, mTLS)      │    │
+│  └─────────────────────────────────┘    │
+│                 │                       │
+│  ┌──────────────┼──────────────┐       │
+│  │              ▼              │       │
+│  │  ┌─────────┐  ┌─────────┐  │       │
+│  │  │ Pod 1   │  │ Pod 2   │  │       │
+│  │  │ + Envoy │  │ + Envoy │  │       │
+│  │  └─────────┘  └─────────┘  │       │
+│  │       ↑            ↑        │       │
+│  │    Service Mesh (Istio)     │       │
+│  └─────────────────────────────┘       │
+└─────────────────────────────────────────┘
 ```
 
-**K8s Features:**
-- **Kustomize**: Base + overlay pattern for multi-environment (dev/prod)
-- **Istio Service Mesh**: mTLS, traffic management, observability
-- **HPA**: Horizontal Pod Autoscaler for automatic scaling
-- **PDB**: Pod Disruption Budget for availability during updates
-- **Ingress**: External traffic routing
-
----
-
-## 9. Cloud-Native Features
-
-### Decision: Infrastructure as Code (Terraform)
+### Infrastructure as Code
 
 ```hcl
 # terraform/main.tf
 module "eks" {
-  source = "terraform-aws-modules/eks/aws"
-  cluster_name = "payment-gateway"
-  # ...
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 19.0"
+  
+  cluster_name    = "payment-gateway"
+  cluster_version = "1.29"
+  
+  # VPC, subnets, node groups...
 }
 ```
 
-**Multi-Cloud Support:**
-- AWS (EKS)
-- Aliyun (ACK)
-- Region selection based on data compliance requirements
+**Multi-Cloud Strategy:**
+- China users → Aliyun (Beijing/Shanghai)
+- Global users → AWS (Singapore/Frankfurt)
+- Data residency compliance per region
 
-### Decision: GitOps with ArgoCD
+---
+
+## 3. Technical Documentation
+
+### API Documentation
+
+| Tool | Purpose | URL |
+|------|---------|-----|
+| OpenAPI 3.0 | API specification | `/v3/api-docs` |
+| Swagger UI | Interactive docs | `/swagger-ui.html` |
+| Examples | Request/response samples | Embedded in annotations |
+
+```java
+@Operation(summary = "Process a new payment")
+@ApiResponse(responseCode = "200", description = "Payment authorized",
+    content = @Content(schema = @Schema(implementation = PostPaymentResponse.class),
+        examples = @ExampleObject(name = "authorized", value = "...")))
+```
+
+### Code Documentation
+
+- **README.md**: Quick start, architecture overview
+- **DESIGN.md**: Design decisions, trade-offs
+- **RUN.md**: Local development, troubleshooting
+- **K8S.md**: Kubernetes deployment guide
+- **Inline comments**: Complex business logic only
+
+### Living Documentation
 
 ```yaml
-# k8s/gitops/argocd-application.yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: payment-gateway
-spec:
-  source:
-    repoURL: https://github.com/james-yz-xie/payment-gateway-challenge-java
-    path: k8s/overlays/prod
-  syncPolicy:
-    automated:
-      selfHeal: true
-      prune: true
+# .github/workflows/ci.yml
+- name: Update API Docs
+  run: |
+    # Auto-generate OpenAPI spec from code
+    ./gradlew generateOpenApiDocs
+    # Publish to GitHub Pages
 ```
-
-### Decision: Comprehensive Observability
-
-| Layer | Tool | Purpose |
-|-------|------|---------|
-| Metrics | Prometheus + Grafana | Performance monitoring |
-| Tracing | Jaeger + OpenTelemetry | Distributed tracing |
-| Logging | Structured JSON | Centralized logging |
-| Alerts | Prometheus Alertmanager | Incident response |
 
 ---
 
-## 10. CI/CD and Quality Gates
+## 4. API Design
 
-### Decision: GitHub Actions with Comprehensive Security Scanning
+### RESTful Principles
 
-The project uses GitHub Actions for continuous integration with the following quality gates:
+| Principle | Implementation |
+|-----------|---------------|
+| Resource-oriented | `/payments`, not `/processPayment` |
+| HTTP verbs | POST (create), GET (read) |
+| Statelessness | No server-side session |
+| Idempotency | `Idempotency-Key` header for safe retries |
 
-- **Build & Tests**: Compile and run Unit/Integration/Functional tests on every PR.
-- **Coverage Report**: JaCoCo generates coverage reports, posted as PR comments.
-- **Coverage Threshold**: 70% minimum for overall and changed files.
-- **SAST**: CodeQL + OWASP Dependency-Check for static analysis.
-- **DAST**: OWASP ZAP for dynamic API security scanning.
-- **K8s Validation**: Kustomize build validation.
+### The "200-Only" Contract
 
-**Security Workflow:**
 ```
-PR Push → SAST (CodeQL + Dependency-Check) → DAST (ZAP API Scan) → Report to PR
+POST /api/v1/payments
+→ Always returns HTTP 200
+→ Business result in JSON body
+
+Success:    { "code": "SUCCESS", "status": "Authorized" }
+Declined:   { "code": "PAYMENT_DECLINED", "status": "Declined" }
+Error:      { "code": "INVALID_REQUEST", "action": "fix_request" }
 ```
 
-### Decision: Deployment Automation
+**Why 200-Only:**
+- Simplified client parsing (no HTTP status switch)
+- Unified error model across all responses
+- Business outcomes separated from transport errors
 
-**Manual Trigger Deployment:**
-- Cloud provider selection (AWS/Aliyun)
-- Environment selection (dev/staging/prod)
-- Terraform plan review + manual approval for production
-- Canary deployment with traffic splitting (1% → 100%)
-- Automatic rollback on health check failure
+### Idempotency Design
+
+```
+Client          Gateway           Bank
+  │               │               │
+  ├── POST ───────►│               │
+  │  Idempotency   │               │
+  │  Key: abc123   │               │
+  │               ├── Check cache ─►│
+  │               │  (miss)         │
+  │               ├── Call bank ───►│
+  │               │  (authorized)   │
+  │               ◄─────────────────│
+  │               ├── Save result   │
+  │◄──────────────┤               │
+  │  { status: Authorized }
+  │               │               │
+  ├── POST ───────►│               │
+  │  Same Key      │               │
+  │  abc123        │               │
+  │               ├── Check cache ─►│
+  │               │  (hit)          │
+  │◄──────────────┤               │
+  │  Same result   │               │
+```
+
+**Concurrent Safety:**
+- Per-key `ReentrantLock` prevents duplicate processing
+- Double-check after acquiring lock
+- Retriable errors allow reprocessing (bank unavailable)
+
+### Response Model
+
+```
+BasePaymentResponse
+├── code          (machine-readable)
+├── description   (human-readable)
+├── action        (client guidance)
+└── links[]       (HATEOAS)
+
+PostPaymentResponse extends BasePaymentResponse
+├── id            (UUID)
+├── status        (Authorized/Declined/Rejected)
+├── cardNumberLastFour
+├── amount
+└── currency
+
+GetPaymentResponse extends PostPaymentResponse
+```
 
 ---
 
-## 11. Assumptions and Limitations
+## 5. Code Design
 
-1.  **Volatility**: Data is lost on application restart (In-memory storage). Production would use Redis/Database.
-2.  **Context Trust**: `Merchant-Id` is trusted from the header without cryptographic verification (Exercise scope).
-3.  **Synchronous Flow**: Requests wait for the bank's response. Future versions would implement async webhooks.
-4.  **Single Instance**: Rate limiting works within a single JVM. Production would use Redis for distributed rate limiting.
+### Layered Architecture
+
+```
+┌─────────────────────────────────────┐
+│  Controller (HTTP Layer)            │
+│  - Request/response mapping         │
+│  - Exception translation            │
+│  - No business logic                │
+├─────────────────────────────────────┤
+│  Service (Business Layer)           │
+│  - Validation                       │
+│  - Orchestration                    │
+│  - Idempotency                      │
+├─────────────────────────────────────┤
+│  Repository (Data Layer)            │
+│  - In-memory storage                │
+│  - Dual-indexed (ID + dedupe key)   │
+├─────────────────────────────────────┤
+│  Client (External Layer)            │
+│  - Bank simulator integration       │
+│  - Retry logic                      │
+└─────────────────────────────────────┘
+```
+
+### SOLID Principles
+
+| Principle | Application |
+|-----------|-------------|
+| **S**ingle Responsibility | Controller handles HTTP, Service handles business |
+| **O**pen/Closed | `BankClient` interface allows new bank integrations |
+| **L**iskov Substitution | `InMemoryIdempotencyRepository` implements `IdempotencyRepository` |
+| **I**nterface Segregation | `PaymentGatewayApi` separates OpenAPI from implementation |
+| **D**ependency Inversion | Service depends on `BankClient` interface, not concrete class |
+
+### Cross-Cutting Concerns (AOP)
+
+```java
+@Aspect
+@Component
+public class RateLimitAspect {
+    @Around("@annotation(RateLimited)")
+    public Object checkLimit(ProceedingJoinPoint pjp) throws Throwable {
+        // Check per-merchant limit
+        // Proceed or throw RateLimitExceededException
+    }
+}
+```
+
+**Benefits:**
+- Business code stays clean
+- Metrics/logging non-invasive
+- Swappable implementations
 
 ---
 
-## 12. Design Trade-offs Summary
+## 6. Testing Mindset
 
-| Trade-off | Choice | Rationale |
-| :--- | :--- | :--- |
-| **Status Codes** | 200-Only | Predictable client parsing and business outcome focus. |
-| **Response Model** | Inheritance | `GetPaymentResponse` extends `PostPaymentResponse` for semantic clarity without code duplication. |
-| **Versioning** | Path (/v1) | Safe evolution and backward compatibility. |
-| **Logging** | Masking | PII protection implemented via `toString()` overrides in models. |
-| **Rate Limiting** | Multi-granularity Fixed Window | 1s (10 req) + 60s (600 req). Protects downstream while allowing bursts. |
-| **Metrics** | AOP + SLF4J | Non-invasive. Upgrade to Micrometer without touching business code. |
-| **Swagger** | Interface Separation | `PaymentGatewayApi` holds all OpenAPI annotations; `PaymentGatewayController` stays clean. |
-| **Error Handling** | Service Throws / Controller Catches | Clean separation between business logic and HTTP representation. |
-| **Coverage** | JaCoCo + PR Enforcement | 70% threshold with automatic PR comments; non-business code excluded. |
-| **Deployment** | Docker + K8s + Istio | Cloud-native, scalable, observable. |
-| **Security** | SAST + DAST + mTLS | Defense in depth. |
-| **IaC** | Terraform | Multi-cloud, reproducible infrastructure. |
+### Testing Pyramid
+
+```
+         ┌─────────┐
+         │   E2E   │  ← Functional Tests (9 tests)
+         │  (Slow) │     Full API flow
+        ┌┴─────────┴┐
+        │ Integration │  ← Integration Tests (9 tests)
+        │   (Medium)  │     Service + external deps
+       ┌┴─────────────┴┐
+       │     Unit       │  ← Unit Tests (36 tests)
+       │    (Fast)      │     Isolated, mocked
+       └────────────────┘
+```
+
+### Test Strategy
+
+| Type | Scope | Tools | When |
+|------|-------|-------|------|
+| **Unit** | Single class | JUnit, Mockito | Every commit |
+| **Integration** | Service + DB/client | Spring Boot Test | PR |
+| **Functional** | Full API | TestRestTemplate | PR |
+| **Security** | Vulnerabilities | ZAP, Dependency-Check | PR |
+| **Load** | Performance | k6 | Release |
+
+### Test Isolation
+
+```java
+@WebMvcTest(PaymentGatewayController.class)
+class PaymentGatewayControllerTest {
+    @MockBean private PaymentGatewayService service;
+    // Fast, no Spring context
+}
+
+@SpringBootTest(webEnvironment = RANDOM_PORT)
+class PaymentGatewayApiIntegrationTest {
+    // Full context, real HTTP calls
+}
+```
+
+### Coverage Strategy
+
+```groovy
+// build.gradle
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.70  // 70% threshold
+            }
+        }
+    }
+}
+```
+
+**Excluded from coverage:**
+- Swagger annotations (`PaymentGatewayApi`)
+- POJO models (`model/**`, `enums/**`)
+- Configuration classes
+- Main application class
+
+### CI/CD Quality Gates
+
+```
+PR Push
+    ↓
+┌─────────────┐
+│  Unit Tests  │ → 36 tests, must pass
+│  (36 tests)  │
+└──────┬──────┘
+       ↓
+┌─────────────┐
+│ Integration  │ → 9 tests, bank simulator required
+│   (9 tests)  │
+└──────┬──────┘
+       ↓
+┌─────────────┐
+│  Functional  │ → 9 tests, full stack
+│   (9 tests)  │
+└──────┬──────┘
+       ↓
+┌─────────────┐
+│   Coverage   │ → 70% minimum
+│   (JaCoCo)   │
+└──────┬──────┘
+       ↓
+┌─────────────┐
+│   Security   │ → CodeQL + OWASP ZAP
+│   (SAST/DAST)│
+└──────┬──────┘
+       ↓
+    Merge
+```
+
+---
+
+## Interview Summary
+
+**Key Talking Points:**
+
+1. **Observability**: Three pillars (metrics, logs, traces) with Prometheus/Grafana/Jaeger
+2. **Packaging**: Docker layered JAR, K8s with Istio, Terraform for multi-cloud
+3. **Documentation**: OpenAPI auto-generated, living docs in CI
+4. **API Design**: 200-Only contract, idempotency with concurrent safety
+5. **Code Design**: SOLID principles, AOP for cross-cutting concerns
+6. **Testing**: Pyramid strategy, 70% coverage, security scanning in CI
