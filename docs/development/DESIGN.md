@@ -71,8 +71,13 @@ Both endpoints require the `Merchant-Id` header. Data is scoped strictly to the 
 
 ## 4. Idempotency and Validation
 
-### Decision: Hardened Idempotency
-`POST /api/v1/payments` uses the `Idempotency-Key` to ensure that duplicate requests from a merchant (e.g., due to network retries) do not result in multiple bank charges. Successful or declined responses are cached and returned for subsequent requests with the same key.
+### Decision: Hardened Idempotency with Concurrent Protection
+`POST /api/v1/payments` uses the `Idempotency-Key` to ensure that duplicate requests from a merchant (e.g., due to network retries) do not result in multiple bank charges. 
+
+**Key Features:**
+- **Cached Responses**: Successful or declined responses are cached and returned for subsequent requests with the same key.
+- **Retriable Errors**: If the previous attempt failed with a retriable error (e.g., `BANK_UNAVAILABLE`), the request is reprocessed instead of returning the cached error.
+- **Concurrent Safety**: Uses `ConcurrentHashMap` with `ReentrantLock` per idempotency key to prevent race conditions when multiple identical requests arrive simultaneously.
 
 ### Decision: Strict ISO 4217 Validation
 Currency validation is not merely format-based. The system utilizes `java.util.Currency` to ensure that every request contains a globally valid ISO currency code, preventing downstream failures at the bank level.
@@ -114,37 +119,155 @@ The `InMemoryIdempotencyRepository` maintains two internal hash maps (System ID 
 
 ---
 
-## 8. CI/CD and Quality Gates
+## 8. Containerization and Deployment
 
-### Decision: GitHub Actions with Coverage Enforcement
+### Decision: Docker-First Deployment
+
+The application is packaged as a Docker image for consistent deployment across environments:
+
+```
+┌─────────────────────────────────────┐
+│         Docker Image                 │
+│  ┌─────────────────────────────┐    │
+│  │  Eclipse Temurin JRE 17      │    │
+│  │  ┌─────────────────────┐    │    │
+│  │  │  Spring Boot App    │    │    │
+│  │  │  (payment-gateway)  │    │    │
+│  │  └─────────────────────┘    │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
+```
+
+**Key Features:**
+- **Multi-stage build**: Separate build and runtime stages for smaller image size
+- **Layered JAR**: Spring Boot layered JAR for efficient Docker layer caching
+- **Health checks**: Built-in actuator endpoints for container health monitoring
+- **Non-root user**: Security best practice
+
+### Decision: Docker Compose for Local Development
+
+```yaml
+# docker-compose.yml
+services:
+  payment-gateway:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      - BANK_URL=http://bank-simulator:8080/payments
+  bank-simulator:
+    image: bbyars/mountebank:2.8.1
+```
+
+### Decision: Kubernetes for Production
+
+```
+┌─────────────────────────────────────┐
+│           Kubernetes                 │
+│  ┌─────────┐  ┌─────────┐          │
+│  │  Pod 1  │  │  Pod 2  │          │
+│  │  + Envoy│  │  + Envoy│  ← Istio │
+│  └─────────┘  └─────────┘          │
+│       ↑              ↑              │
+│    Service Mesh (Istio)             │
+└─────────────────────────────────────┘
+```
+
+**K8s Features:**
+- **Kustomize**: Base + overlay pattern for multi-environment (dev/prod)
+- **Istio Service Mesh**: mTLS, traffic management, observability
+- **HPA**: Horizontal Pod Autoscaler for automatic scaling
+- **PDB**: Pod Disruption Budget for availability during updates
+- **Ingress**: External traffic routing
+
+---
+
+## 9. Cloud-Native Features
+
+### Decision: Infrastructure as Code (Terraform)
+
+```hcl
+# terraform/main.tf
+module "eks" {
+  source = "terraform-aws-modules/eks/aws"
+  cluster_name = "payment-gateway"
+  # ...
+}
+```
+
+**Multi-Cloud Support:**
+- AWS (EKS)
+- Aliyun (ACK)
+- Region selection based on data compliance requirements
+
+### Decision: GitOps with ArgoCD
+
+```yaml
+# k8s/gitops/argocd-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-gateway
+spec:
+  source:
+    repoURL: https://github.com/james-yz-xie/payment-gateway-challenge-java
+    path: k8s/overlays/prod
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+```
+
+### Decision: Comprehensive Observability
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Metrics | Prometheus + Grafana | Performance monitoring |
+| Tracing | Jaeger + OpenTelemetry | Distributed tracing |
+| Logging | Structured JSON | Centralized logging |
+| Alerts | Prometheus Alertmanager | Incident response |
+
+---
+
+## 10. CI/CD and Quality Gates
+
+### Decision: GitHub Actions with Comprehensive Security Scanning
 
 The project uses GitHub Actions for continuous integration with the following quality gates:
 
-- **Build & Unit Tests**: Compile and run JUnit tests on every PR.
-- **Coverage Report**: JaCoCo generates coverage reports, posted as PR comments via `madrapps/jacoco-report`.
-- **Coverage Threshold**: 70% minimum for overall and changed files. PRs failing this threshold are blocked from merge.
-- **Dependency Review**: Scans PRs for known vulnerabilities in dependencies.
-- **PR Size Labeling**: Auto-labels PRs by size (xs/s/m/l/xl) to encourage small, reviewable changes.
+- **Build & Tests**: Compile and run Unit/Integration/Functional tests on every PR.
+- **Coverage Report**: JaCoCo generates coverage reports, posted as PR comments.
+- **Coverage Threshold**: 70% minimum for overall and changed files.
+- **SAST**: CodeQL + OWASP Dependency-Check for static analysis.
+- **DAST**: OWASP ZAP for dynamic API security scanning.
+- **K8s Validation**: Kustomize build validation.
 
-**Excluded from Coverage:**
-- Swagger API interfaces (`PaymentGatewayApi`)
-- Model/POJO classes (`model/**`, `enums/**`)
-- Exception classes (`exception/**`)
-- Spring configuration (`configuration/**`)
-- Unused TODO interfaces (`Metrics`, `RateLimiter`)
-- Security wrappers and main class
+**Security Workflow:**
+```
+PR Push → SAST (CodeQL + Dependency-Check) → DAST (ZAP API Scan) → Report to PR
+```
+
+### Decision: Deployment Automation
+
+**Manual Trigger Deployment:**
+- Cloud provider selection (AWS/Aliyun)
+- Environment selection (dev/staging/prod)
+- Terraform plan review + manual approval for production
+- Canary deployment with traffic splitting (1% → 100%)
+- Automatic rollback on health check failure
 
 ---
 
-## 9. Assumptions and Limitations
+## 11. Assumptions and Limitations
 
-1.  **Volatility**: Data is lost on application restart (In-memory storage).
+1.  **Volatility**: Data is lost on application restart (In-memory storage). Production would use Redis/Database.
 2.  **Context Trust**: `Merchant-Id` is trusted from the header without cryptographic verification (Exercise scope).
 3.  **Synchronous Flow**: Requests wait for the bank's response. Future versions would implement async webhooks.
+4.  **Single Instance**: Rate limiting works within a single JVM. Production would use Redis for distributed rate limiting.
 
 ---
 
-## 10. Design Trade-offs Summary
+## 12. Design Trade-offs Summary
 
 | Trade-off | Choice | Rationale |
 | :--- | :--- | :--- |
@@ -157,3 +280,6 @@ The project uses GitHub Actions for continuous integration with the following qu
 | **Swagger** | Interface Separation | `PaymentGatewayApi` holds all OpenAPI annotations; `PaymentGatewayController` stays clean. |
 | **Error Handling** | Service Throws / Controller Catches | Clean separation between business logic and HTTP representation. |
 | **Coverage** | JaCoCo + PR Enforcement | 70% threshold with automatic PR comments; non-business code excluded. |
+| **Deployment** | Docker + K8s + Istio | Cloud-native, scalable, observable. |
+| **Security** | SAST + DAST + mTLS | Defense in depth. |
+| **IaC** | Terraform | Multi-cloud, reproducible infrastructure. |
