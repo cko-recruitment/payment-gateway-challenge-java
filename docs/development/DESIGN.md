@@ -216,8 +216,8 @@ open http://localhost:3000
 
 **3. Run load test**
 ```bash
-# k6 uses the same docker network to reach the app
-docker-compose -f docker-compose.yml -f docker-compose.loadtest.yml run k6
+# k6 joins the existing network
+docker-compose -f docker-compose.loadtest.yml run k6
 ```
 
 **4. Watch metrics in real-time**
