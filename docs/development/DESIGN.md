@@ -140,75 +140,64 @@ grep -n "ReentrantLock\|lock()\|unlock()" src/main/java/com/checkout/payment/gat
 
 ## 3. Testing Mindset
 
-### Concept: Testing Pyramid
+### Concept: Testing Pyramid + CI as Quality Gate
 
-Unit (fast) → Integration (medium) → Functional (slow)
+Tests are not optional. Every PR must pass all layers before merge.
 
-### Step 1: Run Unit Tests
+| Layer | Speed | What It Tests | CI Gate |
+|-------|-------|---------------|---------|
+| **Unit** | < 10s | Service, Aspect, Repository (with mocks) | `./gradlew test` |
+| **Integration** | ~30s | Component interaction, real HTTP calls | `./gradlew integrationTest` |
+| **Functional** | ~30s | End-to-end HTTP flow | `./gradlew functionalTest` |
+| **Coverage** | — | Combined ≥ 70% | `jacocoFullReport` |
 
-```bash
-# Fast tests, no external dependencies
-./gradlew test
+### CI Workflow (`.github/workflows/ci.yml`)
 
-# Verify output
-# Tests: 36, Passed: 36, Failed: 0
-
-# View HTML report
-open build/reports/tests/test/index.html
+```
+PR opened/pushed
+    │
+    ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Unit Tests │ → │ Integration │ → │ Functional  │
+│  36 tests   │    │  9 tests    │    │  9 tests    │
+└─────────────┘    └─────────────┘    └─────────────┘
+    │
+    ▼
+┌─────────────┐    ┌─────────────┐
+│   Coverage  │ → │   Report    │
+│   ≥ 70%     │    │  PR Comment │
+└─────────────┘    └─────────────┘
 ```
 
-### Step 2: Run Integration Tests
+### Demo: Run Tests Locally
 
 ```bash
-# Requires bank simulator running
-# (started in Step 1 of API Design)
+# All tests (same as CI)
+./gradlew test integrationTest functionalTest
 
-./gradlew integrationTest
-
-# Verify output
-# Tests: 9, Passed: 9, Failed: 0
-
-# View HTML report
-open build/reports/tests/integrationTest/index.html
-```
-
-### Step 3: Run Functional Tests
-
-```bash
-# Requires application running
-# (started in Step 1 of API Design)
-
-./gradlew functionalTest
-
-# Verify output
-# Tests: 9, Passed: 9, Failed: 0
-
-# View HTML report
-open build/reports/tests/functionalTest/index.html
-```
-
-### Step 4: Check Coverage
-
-```bash
-# Generate combined coverage report
+# With coverage
 ./gradlew jacocoFullReport
 
-# View coverage report
-open build/reports/jacoco/jacocoFullReport/html/index.html
-
-# Check coverage percentage
-grep -o 'Total[^%]*%' build/reports/jacoco/jacocoFullReport/html/index.html | head -1
-```
-
-### Step 5: Run Security Scan
-
-```bash
-# OWASP Dependency Check
-./gradlew dependencyCheckAnalyze
-
 # View report
-open build/reports/dependency-check-report.html
+open build/reports/jacoco/jacocoFullReport/html/index.html
 ```
+
+### Demo: View CI Report
+
+Open any PR → CI posts combined test + coverage report as comment:
+
+| Test Type | Total | ✅ Passed | ❌ Failed |
+|-----------|-------|-----------|-----------|
+| 🟢 Unit Tests | 36 | 36 | 0 |
+| 🟢 Integration Tests | 9 | 9 | 0 |
+| 🟢 Functional Tests | 9 | 9 | 0 |
+
+| Test Scope | Coverage |
+|------------|----------|
+| Unit Tests | 🟢 65% |
+| Integration Tests | 🟢 45% |
+| Functional Tests | 🟢 40% |
+| **Combined** | **🟢 85%** |
 
 ---
 
