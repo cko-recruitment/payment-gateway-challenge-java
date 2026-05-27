@@ -300,44 +300,42 @@ kubectl describe virtualservice payment-gateway -n payment-gateway
 
 ## 5. Technical Documentation
 
-### Concept: OpenAPI + Living Documentation
+### Concept: Living Documentation
 
-Auto-generated API docs from code annotations.
+Code is the single source of truth. Docs are generated from code, not maintained separately.
 
-### Step 1: View OpenAPI Spec
+| Problem | Traditional | Living Docs |
+|---------|------------|-------------|
+| API spec outdated | Word/PDF, manual update | OpenAPI auto-generated from annotations |
+| Frontend/backend out of sync | Postman collection | Swagger UI always matches code |
+| Onboarding new dev | Read wiki | Read code + generated docs |
 
+### Demo
+
+**1. OpenAPI spec from code**
 ```bash
-# Start application (if not running)
-./gradlew bootRun &
-
-# Get OpenAPI JSON
-curl -s http://localhost:8090/v3/api-docs | jq . | head -50
-
-# Save to file
-curl -s http://localhost:8090/v3/api-docs > openapi.json
+# Generated from @Operation, @ApiResponse annotations
+curl -s http://localhost:8090/v3/api-docs | jq . | head -30
 ```
 
-### Step 2: View Swagger UI
-
-In `demo.http`: **Step11_SwaggerUI** → Send Request
-
-Or:
+**2. Swagger UI always current**
 ```bash
-# Open in browser
+# UI reflects latest code, never stale
 open http://localhost:8090/swagger-ui.html
-
-# Or use curl
-curl -s http://localhost:8090/swagger-ui.html | grep -o '<title>[^<]*'
 ```
 
-### Step 3: Check API Annotations in Code
-
+**3. Annotations in code**
 ```bash
-# View OpenAPI annotations
 open src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayApi.java
+# → @Operation(summary = "...", description = "...")
+# → @ApiResponse(responseCode = "200", examples = @ExampleObject(...))
+```
 
-# Check for @Operation, @ApiResponse annotations
-grep -c "@Operation\|@ApiResponse" src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayApi.java
+**4. Generate client SDK from spec**
+```bash
+# Frontend team uses this, guaranteed to match backend
+curl -s http://localhost:8090/v3/api-docs > openapi.json
+# → Feed to openapi-generator to create TypeScript/Java client
 ```
 
 ---
