@@ -71,17 +71,6 @@ public class PaymentGatewayController implements PaymentGatewayApi {
 
     secureLogger.info("Processing payment for merchant={}, request={}, dedupeKey={}", merchantId, paymentRequest, dedupeKey);
 
-    Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, dedupeKey);
-    if (existing.isPresent()) {
-      PostPaymentResponse cached = existing.get();
-      if (isRetriable(cached)) {
-        secureLogger.info("Previous attempt was retriable for merchant={}, key={}, retrying", merchantId, dedupeKey);
-      } else {
-        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
-        return new ResponseEntity<>(cached, HttpStatus.OK);
-      }
-    }
-
     try {
       PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
 
