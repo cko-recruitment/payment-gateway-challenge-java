@@ -112,52 +112,31 @@ Clean separation of concerns using interfaces and aspects.
 | Repository | Storage | Interface → easy to swap to Redis/DB |
 | BankClient | External call | Interface → easy to swap to real bank |
 
-### Step 1: View Layered Architecture
+### Key Code Walkthrough
 
+**1. Controller is thin** — only HTTP, no business logic
 ```bash
-# Open controller (HTTP layer)
 open src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
-
-# Open service (Business layer)
-open src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
-
-# Open repository (Data layer)
-open src/main/java/com/checkout/payment/gateway/repository/IdempotencyRepository.java
+# → 20 lines, delegates everything to Service
 ```
 
-### Step 2: Verify Dependency Inversion
-
+**2. Dependency Inversion** — Service depends on interfaces
 ```bash
-# Service depends on interface, not concrete class
 grep "private final BankClient" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
-
-# Output: private final BankClient bankClient;
-# Not: private final BankSimulatorClient bankClient;
+# → private final BankClient bankClient; (not BankSimulatorClient)
 ```
 
-### Step 3: View AOP in Action
-
+**3. AOP** — cross-cutting concerns without modifying business code
 ```bash
-# Open rate limit aspect
 open src/main/java/com/checkout/payment/gateway/aspect/RateLimitAspect.java
-
-# Open metrics aspect
 open src/main/java/com/checkout/payment/gateway/aspect/PaymentMetricsAspect.java
-
-# Check that controller has no rate limit logic
-grep -c "rateLimit\|RateLimit" src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
-
-# Output: 0 (business code stays clean)
+# → @Around annotations, controller has 0 rate limit code
 ```
 
-### Step 4: Verify Concurrent Idempotency
-
+**4. Concurrent Idempotency** — lock per dedupe key
 ```bash
-# Open the lock implementation
-open src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
-
-# Search for lock usage
 grep -n "ReentrantLock\|lock()\|unlock()" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
+# → ConcurrentHashMap<String, ReentrantLock> for per-key locking
 ```
 
 ---
