@@ -200,17 +200,35 @@ jobs:
             LOW=$(jq '[.site[0].alerts[]? | select(.riskcode == "1")] | length' zap-api-report.json 2>/dev/null || echo "0")
             INFO=$(jq '[.site[0].alerts[]? | select(.riskcode == "0")] | length' zap-api-report.json 2>/dev/null || echo "0")
             
-            # Extract HIGH vulnerability details for PR comment
-            if [ "$HIGH" != "0" ]; then
-              jq -r '.site[0].alerts[]? | select(.riskcode == "3") | 
+            # Extract vulnerability details for PR comment
+            extract_alerts() {
+              local riskcode=$1
+              local emoji=$2
+              jq -r --arg code "$riskcode" --arg emoji "$emoji" '.site[0].alerts[]? | select(.riskcode == $code) | 
                 "**" + .name + "**  \n" +
-                "- **Risk**: 🔴 High  \n" +
+                "- **Risk**: " + $emoji + "  \n" +
                 "- **Description**: " + (.desc | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
                 "- **Solution**: " + (.solution | gsub("<[^>]+>"; "") | gsub("[\n\r]+"; " ") | .[0:200]) + "  \n" +
                 "---  \n"
-              ' zap-api-report.json > zap_high_details.txt 2>/dev/null || echo "" > zap_high_details.txt
+              ' zap-api-report.json 2>/dev/null || echo ""
+            }
+            
+            if [ "$HIGH" != "0" ]; then
+              extract_alerts "3" "🔴 High" > zap_high_details.txt
             else
               echo "" > zap_high_details.txt
+            fi
+            
+            if [ "$MEDIUM" != "0" ]; then
+              extract_alerts "2" "🟠 Medium" > zap_medium_details.txt
+            else
+              echo "" > zap_medium_details.txt
+            fi
+            
+            if [ "$LOW" != "0" ]; then
+              extract_alerts "1" "🟡 Low" > zap_low_details.txt
+            else
+              echo "" > zap_low_details.txt
             fi
           else
             echo "No ZAP report found"
@@ -230,6 +248,16 @@ jobs:
           ZAP_HIGH_DETAILS=$(cat zap_high_details.txt)
           echo "ZAP_HIGH_DETAILS<<EOF" >> $GITHUB_ENV
           echo "$ZAP_HIGH_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          ZAP_MEDIUM_DETAILS=$(cat zap_medium_details.txt)
+          echo "ZAP_MEDIUM_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$ZAP_MEDIUM_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          ZAP_LOW_DETAILS=$(cat zap_low_details.txt)
+          echo "ZAP_LOW_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$ZAP_LOW_DETAILS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Upload ZAP Report
@@ -264,8 +292,16 @@ jobs:
             ' || '' }}${{ env.ZAP_HIGH_DETAILS }}${{ env.ZAP_HIGH != '0' && '
             
             **Action Required**: Please review and fix these vulnerabilities before merging.' || '' }}
+            
+            ${{ env.ZAP_MEDIUM != '0' && '### ⚠️ MEDIUM Vulnerabilities Found
+            
+            ' || '' }}${{ env.ZAP_MEDIUM_DETAILS }}
+            
+            ${{ env.ZAP_LOW != '0' && '### ℹ️ LOW Vulnerabilities Found
+            
+            ' || '' }}${{ env.ZAP_LOW_DETAILS }}
 
-            📄 [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) | [Download ZAP Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
+            📄 [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
             ### Scan Coverage
             - **API Spec**: OpenAPI 3.0 from `/v3/api-docs`
