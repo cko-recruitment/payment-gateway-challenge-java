@@ -45,15 +45,16 @@ jobs:
 
       # OWASP Dependency-Check - Scan for known vulnerabilities in dependencies
       - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
-        with:
-          project: 'payment-gateway'
-          path: '.'
-          format: 'ALL'
-          args: >
-            --enableRetired
+        run: |
+          docker run --rm \
+            -v $(pwd):/src \
+            -v $(pwd)/reports:/reports \
+            owasp/dependency-check:latest \
+            --project payment-gateway \
+            --scan /src \
+            --format ALL \
+            --out /reports \
+            --enableRetired \
             --enableExperimental
 
       - name: Parse Dependency Check Results
