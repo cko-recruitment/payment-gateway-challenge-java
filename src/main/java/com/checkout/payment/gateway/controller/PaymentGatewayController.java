@@ -73,8 +73,13 @@ public class PaymentGatewayController implements PaymentGatewayApi {
 
     Optional<PostPaymentResponse> existing = paymentGatewayService.getPaymentByDedupeKey(merchantId, dedupeKey);
     if (existing.isPresent()) {
-      secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
-      return new ResponseEntity<>(existing.get(), HttpStatus.OK);
+      PostPaymentResponse cached = existing.get();
+      if (isRetriable(cached)) {
+        secureLogger.info("Previous attempt was retriable for merchant={}, key={}, retrying", merchantId, dedupeKey);
+      } else {
+        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
+        return new ResponseEntity<>(cached, HttpStatus.OK);
+      }
     }
 
     try {
@@ -109,5 +114,9 @@ public class PaymentGatewayController implements PaymentGatewayApi {
       response.setGatewayCode(GatewayCode.BANK_ERROR);
     }
     return response;
+  }
+
+  private boolean isRetriable(PostPaymentResponse response) {
+    return "retry".equals(response.getAction());
   }
 }
