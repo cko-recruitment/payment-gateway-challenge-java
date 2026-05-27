@@ -185,6 +185,47 @@ curl -s http://localhost:8090/api/v1/payments \
 # → createdAt < updatedAt (retried! updatedAt changed)
 ```
 
+### Step 5: Retrieve Payment by ID
+
+```bash
+# Use the ID from Step 2
+curl -s http://localhost:8090/api/v1/payments/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Merchant-Id: merchant-123" \
+  | jq .
+
+# Expected Response
+{
+  "code": "SUCCESS",
+  "description": "Payment authorized successfully",
+  "action": "none",
+  "links": [
+    {
+      "rel": "self",
+      "href": "/api/v1/payments/550e8400-e29b-41d4-a716-446655440000",
+      "method": "GET"
+    }
+  ],
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "Authorized",
+  "cardNumberLastFour": 4241,
+  "expiryMonth": 12,
+  "expiryYear": 2027,
+  "currency": "USD",
+  "amount": 100
+}
+```
+
+### Step 6: Retrieve Payment by Idempotency Key
+
+```bash
+# Use the key from Step 2
+curl -s http://localhost:8090/api/v1/payments/idempotency/key-1 \
+  -H "Merchant-Id: merchant-123" \
+  | jq .
+
+# Expected Response (same as Step 5)
+```
+
 ---
 
 ## 2. Code Design
