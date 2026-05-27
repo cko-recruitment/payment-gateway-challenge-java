@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpServerErrorException;
@@ -26,6 +28,9 @@ public class PaymentGatewayService {
   private final SecureLogger secureLogger;
   private final IdempotencyRepository idempotencyRepository;
   private final BankClient bankClient;
+  
+  // Concurrent lock map for idempotency keys
+  private final ConcurrentHashMap<String, ReentrantLock> locks = new ConcurrentHashMap<>();
 
   public PaymentGatewayService(SecureLogger secureLogger,
       IdempotencyRepository idempotencyRepository, BankClient bankClient) {
@@ -55,29 +60,45 @@ public class PaymentGatewayService {
       throw new PaymentValidationException(String.join("; ", validationErrors));
     }
 
+    // Acquire lock for concurrent idempotency protection
+    String lockKey = merchantId + ":" + dedupeKey;
+    ReentrantLock lock = locks.computeIfAbsent(lockKey, k -> new ReentrantLock());
+    lock.lock();
     try {
-      BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
-      PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
-
-      PostPaymentResponse response = new PostPaymentResponse();
-      response.setId(UUID.randomUUID());
-      response.setStatus(status);
-      response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
-      response.setExpiryMonth(paymentRequest.getExpiryMonth());
-      response.setExpiryYear(paymentRequest.getExpiryYear());
-      response.setCurrency(paymentRequest.getCurrency().toUpperCase());
-      response.setAmount(paymentRequest.getAmount());
-      response.setGatewayCode(status == PaymentStatus.AUTHORIZED ? GatewayCode.SUCCESS : GatewayCode.DECLINED);
-
-      if (dedupeKey != null && !dedupeKey.isBlank()) {
-        idempotencyRepository.save(merchantId, dedupeKey, response);
+      // Double-check after acquiring lock
+      Optional<PostPaymentResponse> existing = idempotencyRepository.getByKey(merchantId, dedupeKey);
+      if (existing.isPresent()) {
+        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
+        return existing.get();
       }
-      secureLogger.info("Payment processed: merchant={}, id={}, status={}", merchantId, response.getId(), status);
-      return response;
 
-    } catch (HttpServerErrorException ex) {
-      secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
-      throw new BankProcessingException("Bank error: " + ex.getStatusCode(), ex);
+      try {
+        BankPaymentResponse bankResponse = bankClient.processPayment(paymentRequest);
+        PaymentStatus status = bankResponse.isAuthorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
+
+        PostPaymentResponse response = new PostPaymentResponse();
+        response.setId(UUID.randomUUID());
+        response.setStatus(status);
+        response.setCardNumberLastFour(Integer.parseInt(paymentRequest.getLastFourDigits()));
+        response.setExpiryMonth(paymentRequest.getExpiryMonth());
+        response.setExpiryYear(paymentRequest.getExpiryYear());
+        response.setCurrency(paymentRequest.getCurrency().toUpperCase());
+        response.setAmount(paymentRequest.getAmount());
+        response.setGatewayCode(status == PaymentStatus.AUTHORIZED ? GatewayCode.SUCCESS : GatewayCode.DECLINED);
+
+        if (dedupeKey != null && !dedupeKey.isBlank()) {
+          idempotencyRepository.save(merchantId, dedupeKey, response);
+        }
+        secureLogger.info("Payment processed: merchant={}, id={}, status={}", merchantId, response.getId(), status);
+        return response;
+
+      } catch (HttpServerErrorException ex) {
+        secureLogger.error("Bank error for merchant={}: {}", merchantId, ex.getStatusCode());
+        throw new BankProcessingException("Bank error: " + ex.getStatusCode(), ex);
+      }
+    } finally {
+      lock.unlock();
+      locks.remove(lockKey);
     }
   }
 
