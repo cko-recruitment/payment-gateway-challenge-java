@@ -3,7 +3,6 @@ package com.checkout.payment.gateway.controller;
 import com.checkout.payment.gateway.enums.GatewayCode;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankProcessingException;
-import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.GetPaymentResponse;
 import com.checkout.payment.gateway.model.Link;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
@@ -72,23 +71,18 @@ public class PaymentGatewayController implements PaymentGatewayApi {
 
     secureLogger.info("Processing payment for merchant={}, request={}, dedupeKey={}", merchantId, paymentRequest, dedupeKey);
 
-    try {
-      PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
+    PostPaymentResponse response = paymentGatewayService.processPayment(merchantId, paymentRequest, dedupeKey);
 
-      // Check if it's a bank error response (retriable)
-      if (response.getCode() != null && (response.getCode().equals("BANK_UNAVAILABLE") || response.getCode().equals("BANK_ERROR"))) {
-        response.addLink(new Link("self", "/api/v1/payments", "POST"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
-      }
-
-      response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
-      response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
-
+    // Check if it's a bank error response (retriable)
+    if (response.getCode() != null && (response.getCode().equals("BANK_UNAVAILABLE") || response.getCode().equals("BANK_ERROR"))) {
+      response.addLink(new Link("self", "/api/v1/payments", "POST"));
       return new ResponseEntity<>(response, HttpStatus.OK);
-    } catch (PaymentValidationException ex) {
-      secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, ex.getMessage());
-      return new ResponseEntity<>(PostPaymentResponse.rejected(ex.getMessage()), HttpStatus.OK);
     }
+
+    response.addLink(new Link("self", "/api/v1/payments/" + response.getId(), "GET"));
+    response.addLink(new Link("idempotency", "/api/v1/payments/idempotency/" + dedupeKey, "GET"));
+
+    return new ResponseEntity<>(response, HttpStatus.OK);
   }
 
   private PostPaymentResponse bankErrorResponse(BankProcessingException ex) {

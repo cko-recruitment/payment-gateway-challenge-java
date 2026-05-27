@@ -145,39 +145,39 @@ class PaymentGatewayServiceTest {
   }
 
   @Test
-  void shouldThrowPaymentValidationExceptionWhenCardNumberIsInvalid() {
+  void shouldReturnRejectedResponseWhenCardNumberIsInvalid() {
     PostPaymentRequest request = buildRequest("4242424242424a", 12, YearMonth.now().getYear() + 1,
         "USD", 100, "123");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
-        .isInstanceOf(PaymentValidationException.class)
-        .hasMessageContaining("Card number must only contain numeric characters");
+    PostPaymentResponse response = paymentGatewayService.processPayment("merchant-123", request, null);
 
+    assertThat(response.getCode()).isEqualTo("INVALID_REQUEST");
+    assertThat(response.getDescription()).contains("Card number must only contain numeric characters");
     verify(bankClient, never()).processPayment(any());
   }
 
   @Test
-  void shouldThrowPaymentValidationExceptionWhenCurrencyIsInvalid() {
+  void shouldReturnRejectedResponseWhenCurrencyIsInvalid() {
     PostPaymentRequest request = buildRequest("4242424242424242", 12, YearMonth.now().getYear() + 1,
         "840", 1500, "123");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
-        .isInstanceOf(PaymentValidationException.class)
-        .hasMessageContaining("Invalid ISO 4217 currency code");
+    PostPaymentResponse response = paymentGatewayService.processPayment("merchant-123", request, null);
 
+    assertThat(response.getCode()).isEqualTo("INVALID_REQUEST");
+    assertThat(response.getDescription()).contains("Invalid ISO 4217 currency code");
     verify(bankClient, never()).processPayment(any());
   }
 
   @Test
-  void shouldThrowPaymentValidationExceptionWhenMultipleValidationErrors() {
+  void shouldReturnRejectedResponseWhenMultipleValidationErrors() {
     PostPaymentRequest request = buildRequest("abc", 13, YearMonth.now().getYear() - 1,
         "US", -10, "12");
 
-    assertThatThrownBy(() -> paymentGatewayService.processPayment("merchant-123", request, null))
-        .isInstanceOf(PaymentValidationException.class)
-        .hasMessageContaining("Card number must only contain numeric characters")
-        .hasMessageContaining("Expiry month must be between 1 and 12");
+    PostPaymentResponse response = paymentGatewayService.processPayment("merchant-123", request, null);
 
+    assertThat(response.getCode()).isEqualTo("INVALID_REQUEST");
+    assertThat(response.getDescription()).contains("Card number must only contain numeric characters");
+    assertThat(response.getDescription()).contains("Expiry month must be between 1 and 12");
     verify(bankClient, never()).processPayment(any());
   }
 

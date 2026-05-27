@@ -55,10 +55,26 @@ public class PaymentGatewayService {
       PostPaymentRequest paymentRequest, 
       String dedupeKey) {
     secureLogger.info("Processing payment for merchant={}, request={}", merchantId, paymentRequest);
+
+    // Check cache BEFORE validation (return cached result including validation errors)
+    Optional<PostPaymentResponse> existing = idempotencyRepository.getByKey(merchantId, dedupeKey);
+    if (existing.isPresent()) {
+      PostPaymentResponse cached = existing.get();
+      if (!isRetriable(cached)) {
+        secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
+        return cached;
+      }
+      secureLogger.info("Previous attempt was retriable for merchant={}, key={}, retrying", merchantId, dedupeKey);
+    }
+
     List<String> validationErrors = validateRequest(paymentRequest);
     if (!validationErrors.isEmpty()) {
       secureLogger.warn("Payment request rejected for merchant={}: {}", merchantId, validationErrors);
-      throw new PaymentValidationException(String.join("; ", validationErrors));
+      PostPaymentResponse errorResponse = PostPaymentResponse.rejected(String.join("; ", validationErrors));
+      if (dedupeKey != null && !dedupeKey.isBlank()) {
+        idempotencyRepository.save(merchantId, dedupeKey, errorResponse);
+      }
+      return errorResponse;
     }
 
     // Acquire lock for concurrent idempotency protection
@@ -67,10 +83,10 @@ public class PaymentGatewayService {
     lock.lock();
     try {
       // Double-check after acquiring lock
-      Optional<PostPaymentResponse> existing = idempotencyRepository.getByKey(merchantId, dedupeKey);
+      Optional<PostPaymentResponse> existingAfterLock = idempotencyRepository.getByKey(merchantId, dedupeKey);
       Instant originalCreatedAt = null;
-      if (existing.isPresent()) {
-        PostPaymentResponse cached = existing.get();
+      if (existingAfterLock.isPresent()) {
+        PostPaymentResponse cached = existingAfterLock.get();
         if (!isRetriable(cached)) {
           secureLogger.info("Returning dedupe response for merchant={}, key={}", merchantId, dedupeKey);
           return cached;
