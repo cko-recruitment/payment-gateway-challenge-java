@@ -128,13 +128,33 @@ jobs:
       - name: Build Application
         run: ./gradlew bootJar
 
+      - name: Start Bank Simulator
+        run: |
+          docker run -d --name bank-simulator-dast \
+            -p 2525:2525 -p 8080:8080 \
+            -v ${{ github.workspace }}/imposters:/imposters \
+            bbyars/mountebank:2.8.1 \
+            --configfile /imposters/bank_simulator.ejs --allowInjection
+          sleep 5
+          curl -f http://localhost:2525/imposters || (echo "Bank simulator failed to start" && exit 1)
+
       - name: Start Application
         run: |
+          export BANK_URL=http://localhost:8080/payments
           java -jar build/libs/*.jar &
           APP_PID=$!
           echo "APP_PID=$APP_PID" >> $GITHUB_ENV
-          sleep 30
-          curl -f http://localhost:8090/actuator/health || (echo "App failed to start" && exit 1)
+          # Wait for app to be ready (with retries)
+          for i in {1..30}; do
+            sleep 2
+            if curl -sf http://localhost:8090/actuator/health > /dev/null 2>&1; then
+              echo "Application started successfully"
+              exit 0
+            fi
+            echo "Waiting for app... attempt $i/30"
+          done
+          echo "App failed to start"
+          exit 1
 
       - name: OWASP ZAP Baseline Scan
         id: zap
@@ -206,6 +226,7 @@ jobs:
           if [ -n "$APP_PID" ]; then
             kill $APP_PID || true
           fi
+          docker stop bank-simulator-dast && docker rm bank-simulator-dast || true
 
       - name: Fail on High/Critical
         if: env.ZAP_HIGH != '0' || env.DEP_CHECK_CRITICAL != '0' || env.DEP_CHECK_HIGH != '0'
