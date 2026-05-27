@@ -83,9 +83,9 @@ docker-compose up --build
 
 ## 2. Code Design
 
-### Concept: SOLID Principles + AOP
+### Concept: Separation of Concerns
 
-Clean separation of concerns using interfaces and aspects.
+Business logic ≠ HTTP logic ≠ Cross-cutting concerns. Each has its own layer.
 
 ### Architecture
 
@@ -99,44 +99,41 @@ Clean separation of concerns using interfaces and aspects.
         │         BankSimulatorClient (REST call)     │
         │                                             │
         ▼                                             ▼
-   HATEOAS Links                              In-Memory Cache
-   (request-specific)                         (idempotency)
+   Request/Response                           In-Memory Cache
+   (no business logic)                         (idempotency)
 ```
 
 ### Why This Design?
 
-| Layer | Responsibility | Why |
-|-------|---------------|-----|
-| Controller | HTTP only | Thin, testable |
-| Service | Business logic | Validation + cache + bank call |
-| Repository | Storage | Interface → easy to swap to Redis/DB |
-| BankClient | External call | Interface → easy to swap to real bank |
+| Problem | Solution | Where |
+|---------|----------|-------|
+| Controller gets fat | Move business logic to Service | `PaymentGatewayService` |
+| Hard to swap bank | Depend on interface, not implementation | `BankClient` interface |
+| Rate limit scattered | AOP aspect wraps controller | `RateLimitAspect` |
+| Concurrent duplicate charge | Lock per idempotency key | `ConcurrentHashMap<key, Lock>` |
 
-### Key Code Walkthrough
+### Walkthrough
 
-**1. Controller is thin** — only HTTP, no business logic
 ```bash
-open src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
-# → 20 lines, delegates everything to Service
-```
+# 1. Controller: thin, no business logic
+wc -l src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
+# → ~80 lines, only HTTP handling
 
-**2. Dependency Inversion** — Service depends on interfaces
-```bash
+# 2. Service: all business logic in one place
+wc -l src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
+# → ~200 lines, validation + cache + bank + lock
+
+# 3. Interface: easy to swap implementations
 grep "private final BankClient" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
-# → private final BankClient bankClient; (not BankSimulatorClient)
-```
+# → BankClient, not BankSimulatorClient
 
-**3. AOP** — cross-cutting concerns without modifying business code
-```bash
-open src/main/java/com/checkout/payment/gateway/aspect/RateLimitAspect.java
-open src/main/java/com/checkout/payment/gateway/aspect/PaymentMetricsAspect.java
-# → @Around annotations, controller has 0 rate limit code
-```
+# 4. AOP: add behavior without touching business code
+grep -c "rateLimit\|RateLimit" src/main/java/com/checkout/payment/gateway/controller/PaymentGatewayController.java
+# → 0 (nothing in controller)
 
-**4. Concurrent Idempotency** — lock per dedupe key
-```bash
+# 5. Lock: concurrent idempotency protection
 grep -n "ReentrantLock\|lock()\|unlock()" src/main/java/com/checkout/payment/gateway/service/PaymentGatewayService.java
-# → ConcurrentHashMap<String, ReentrantLock> for per-key locking
+# → per-key lock in ConcurrentHashMap
 ```
 
 ---
