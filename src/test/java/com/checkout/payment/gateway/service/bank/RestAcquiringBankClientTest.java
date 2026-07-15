@@ -17,7 +17,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,6 +62,30 @@ class RestAcquiringBankClientTest {
         .thenThrow(new HttpServerErrorException(HttpStatus.SERVICE_UNAVAILABLE));
 
     assertThrows(BankUnavailableException.class, () -> client.processPayment(validRequest()));
+  }
+
+  @Test
+  void bankResourceAccessErrorMapsToBankUnavailable() {
+    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
+        .thenThrow(new ResourceAccessException("connection failed"));
+
+    assertThrows(BankUnavailableException.class, () -> client.processPayment(validRequest()));
+  }
+
+  @Test
+  void bankClientErrorIsPropagated() {
+    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
+        .thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST));
+
+    assertThrows(HttpClientErrorException.class, () -> client.processPayment(validRequest()));
+  }
+
+  @Test
+  void nullBankBodyMapsToDeclinedStatus() {
+    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
+        .thenReturn(new ResponseEntity<>(null, HttpStatus.OK));
+
+    assertEquals(PaymentStatus.DECLINED, client.processPayment(validRequest()));
   }
 
   private PostPaymentRequest validRequest() {
