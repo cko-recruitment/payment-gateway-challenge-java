@@ -3,41 +3,45 @@ package com.checkout.payment.gateway.regression;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.service.bank.AcquiringBankClient;
+import com.checkout.payment.gateway.service.metrics.PaymentMetricsRecorder;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
+import com.checkout.payment.gateway.service.validation.DefaultPaymentRequestValidator;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentGatewayRegressionTest {
 
   @Mock
-  private RestTemplate restTemplate;
+  private AcquiringBankClient acquiringBankClient;
+  @Mock
+  private PaymentMetricsRecorder paymentMetricsRecorder;
 
   private PaymentGatewayService service;
 
   @BeforeEach
   void setUp() {
-    service = new PaymentGatewayService(new PaymentsRepository(), new IdempotencyRepository());
-    service.setRestTemplate(restTemplate);
-    service.setBankPaymentsUrl("http://localhost:8080/payments");
+    service = new PaymentGatewayService(
+        new PaymentsRepository(),
+        new IdempotencyRepository(),
+        new DefaultPaymentRequestValidator(),
+        acquiringBankClient,
+        paymentMetricsRecorder
+    );
   }
 
   @Test
@@ -49,8 +53,7 @@ class PaymentGatewayRegressionTest {
     PostPaymentResponse rejected = service.processPaymentDetails(invalid, key);
     assertEquals(PaymentStatus.REJECTED, rejected.getStatus());
 
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
     PostPaymentResponse accepted = service.processPaymentDetails(validRequest(), key);
 
     assertEquals(PaymentStatus.AUTHORIZED, accepted.getStatus());
@@ -59,21 +62,19 @@ class PaymentGatewayRegressionTest {
 
   @Test
   void idempotencyKeyWithSurroundingSpacesMustReplayOriginal() {
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
 
     PostPaymentRequest request = validRequest();
     PostPaymentResponse first = service.processPaymentDetails(request, "key-123");
     PostPaymentResponse second = service.processPaymentDetails(request, "  key-123  ");
 
     assertEquals(first.getId(), second.getId());
-    verify(restTemplate, times(1)).postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class));
+    verify(acquiringBankClient, times(1)).processPayment(request);
   }
 
   @Test
   void idempotencySignatureMustTreatCurrencyCaseInsensitively() {
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
 
     String key = "idem-" + UUID.randomUUID();
     PostPaymentRequest upperCase = validRequest();
@@ -84,7 +85,7 @@ class PaymentGatewayRegressionTest {
     PostPaymentResponse second = service.processPaymentDetails(lowerCase, key);
 
     assertEquals(first.getId(), second.getId());
-    verify(restTemplate, times(1)).postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class));
+    verify(acquiringBankClient, times(1)).processPayment(any());
   }
 
   private PostPaymentRequest validRequest() {
@@ -96,12 +97,5 @@ class PaymentGatewayRegressionTest {
     request.setAmount(1050);
     request.setCvv(123);
     return request;
-  }
-
-  private BankPaymentResponse authorizedBankResponse() {
-    BankPaymentResponse response = new BankPaymentResponse();
-    response.setAuthorized(true);
-    response.setAuthorizationCode(UUID.randomUUID().toString());
-    return response;
   }
 }

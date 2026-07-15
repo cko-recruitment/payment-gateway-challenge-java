@@ -6,14 +6,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class IdempotencyRepository {
+public class IdempotencyRepository implements IdempotencyStore {
   private final ConcurrentHashMap<String, IdempotentPaymentRecord> records = new ConcurrentHashMap<>();
 
   public Optional<IdempotentPaymentRecord> get(String idempotencyKey) {
     return Optional.ofNullable(records.get(idempotencyKey));
   }
 
-  public void add(String idempotencyKey, IdempotentPaymentRecord record) {
-    records.put(idempotencyKey, record);
+  @Override
+  public IdempotentPaymentRecord addIfAbsent(String idempotencyKey, IdempotentPaymentRecord record) {
+    return records.putIfAbsent(idempotencyKey, record);
   }
 }

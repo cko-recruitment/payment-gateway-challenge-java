@@ -56,3 +56,9 @@ For documentation openAPI is included, and it can be found under the following u
     - `payment.requests.idempotency_replay`
     - `payment.requests.idempotency_conflict`
     - `payment.requests.bank_unavailable`
+- SOLID-oriented architecture:
+  - `PaymentGatewayService` focuses on orchestration only
+  - validation is delegated to `PaymentRequestValidator`
+  - bank integration is delegated to `AcquiringBankClient`
+  - persistence depends on `PaymentStore`/`IdempotencyStore` abstractions
+  - metrics emission is delegated to `PaymentMetricsRecorder`

@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -12,26 +11,27 @@ import static org.mockito.Mockito.when;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.IdempotencyConflictException;
-import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.service.bank.AcquiringBankClient;
+import com.checkout.payment.gateway.service.metrics.PaymentMetricsRecorder;
+import com.checkout.payment.gateway.service.validation.DefaultPaymentRequestValidator;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentGatewayServiceUnitTest {
 
   @Mock
-  private RestTemplate restTemplate;
+  private AcquiringBankClient acquiringBankClient;
+  @Mock
+  private PaymentMetricsRecorder paymentMetricsRecorder;
 
   private PaymentGatewayService service;
   private PaymentsRepository paymentsRepository;
@@ -39,9 +39,13 @@ class PaymentGatewayServiceUnitTest {
   @BeforeEach
   void setUp() {
     paymentsRepository = new PaymentsRepository();
-    service = new PaymentGatewayService(paymentsRepository, new IdempotencyRepository());
-    service.setRestTemplate(restTemplate);
-    service.setBankPaymentsUrl("http://localhost:8080/payments");
+    service = new PaymentGatewayService(
+        paymentsRepository,
+        new IdempotencyRepository(),
+        new DefaultPaymentRequestValidator(),
+        acquiringBankClient,
+        paymentMetricsRecorder
+    );
   }
 
   @Test
@@ -52,13 +56,12 @@ class PaymentGatewayServiceUnitTest {
     PostPaymentResponse response = service.processPaymentDetails(request);
 
     assertEquals(PaymentStatus.REJECTED, response.getStatus());
-    verifyNoInteractions(restTemplate);
+    verifyNoInteractions(acquiringBankClient);
   }
 
   @Test
   void whenRequestIsValidThenAuthorizedPaymentIsPersisted() {
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
 
     PostPaymentResponse response = service.processPaymentDetails(validRequest());
 
@@ -69,8 +72,7 @@ class PaymentGatewayServiceUnitTest {
 
   @Test
   void whenSameIdempotencyKeyAndSamePayloadThenBankCalledOnceAndIdReused() {
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
 
     String idempotencyKey = "idem-" + UUID.randomUUID();
     PostPaymentRequest request = validRequest();
@@ -79,13 +81,12 @@ class PaymentGatewayServiceUnitTest {
 
     assertEquals(first.getId(), second.getId());
     assertEquals(PaymentStatus.AUTHORIZED, second.getStatus());
-    verify(restTemplate, times(1)).postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class));
+    verify(acquiringBankClient, times(1)).processPayment(request);
   }
 
   @Test
   void whenSameIdempotencyKeyUsedWithDifferentPayloadThenConflictIsThrown() {
-    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
-        .thenReturn(new ResponseEntity<>(authorizedBankResponse(), HttpStatus.OK));
+    when(acquiringBankClient.processPayment(any())).thenReturn(PaymentStatus.AUTHORIZED);
 
     String idempotencyKey = "idem-" + UUID.randomUUID();
     PostPaymentRequest firstRequest = validRequest();
@@ -106,12 +107,5 @@ class PaymentGatewayServiceUnitTest {
     request.setAmount(1050);
     request.setCvv(123);
     return request;
-  }
-
-  private BankPaymentResponse authorizedBankResponse() {
-    BankPaymentResponse response = new BankPaymentResponse();
-    response.setAuthorized(true);
-    response.setAuthorizationCode(UUID.randomUUID().toString());
-    return response;
   }
 }

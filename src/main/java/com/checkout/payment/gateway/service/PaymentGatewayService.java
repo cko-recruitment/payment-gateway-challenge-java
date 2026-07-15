@@ -4,68 +4,48 @@ import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
 import com.checkout.payment.gateway.exception.EventProcessingException;
 import com.checkout.payment.gateway.exception.IdempotencyConflictException;
-import com.checkout.payment.gateway.model.BankPaymentRequest;
-import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.IdempotentPaymentRecord;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.repository.IdempotencyRepository;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.time.LocalDate;
+import com.checkout.payment.gateway.repository.IdempotencyStore;
+import com.checkout.payment.gateway.repository.PaymentStore;
+import com.checkout.payment.gateway.service.bank.AcquiringBankClient;
+import com.checkout.payment.gateway.service.metrics.PaymentMetricsRecorder;
+import com.checkout.payment.gateway.service.validation.PaymentRequestValidator;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
 
 @Service
 public class PaymentGatewayService {
 
   private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
-  private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "EUR", "GBP");
+  private static final int IDEMPOTENCY_LOCK_STRIPES = 64;
+  private static final Object[] IDEMPOTENCY_LOCKS = createIdempotencyLocks();
 
-  private final PaymentsRepository paymentsRepository;
-  private final IdempotencyRepository idempotencyRepository;
-  private RestTemplate restTemplate;
-  private String bankPaymentsUrl = "http://localhost:8080/payments";
-  private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+  private final PaymentStore paymentStore;
+  private final IdempotencyStore idempotencyStore;
+  private final PaymentRequestValidator paymentRequestValidator;
+  private final AcquiringBankClient acquiringBankClient;
+  private final PaymentMetricsRecorder paymentMetricsRecorder;
 
-  public PaymentGatewayService(PaymentsRepository paymentsRepository,
-                               IdempotencyRepository idempotencyRepository) {
-    this.paymentsRepository = paymentsRepository;
-    this.idempotencyRepository = idempotencyRepository;
-  }
-
-  @Autowired
-  public void setRestTemplate(RestTemplate restTemplate) {
-    this.restTemplate = restTemplate;
-  }
-
-  @Autowired(required = false)
-  public void setMeterRegistry(MeterRegistry meterRegistry) {
-    if (meterRegistry != null) {
-      this.meterRegistry = meterRegistry;
-    }
-  }
-
-  @Value("${bank.simulator.url:http://localhost:8080/payments}")
-  public void setBankPaymentsUrl(String bankPaymentsUrl) {
-    this.bankPaymentsUrl = bankPaymentsUrl;
+  public PaymentGatewayService(PaymentStore paymentStore,
+                               IdempotencyStore idempotencyStore,
+                               PaymentRequestValidator paymentRequestValidator,
+                               AcquiringBankClient acquiringBankClient,
+                               PaymentMetricsRecorder paymentMetricsRecorder) {
+    this.paymentStore = paymentStore;
+    this.idempotencyStore = idempotencyStore;
+    this.paymentRequestValidator = paymentRequestValidator;
+    this.acquiringBankClient = acquiringBankClient;
+    this.paymentMetricsRecorder = paymentMetricsRecorder;
   }
 
   public PostPaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to to payment with ID {}", id);
-    return paymentsRepository.get(id).orElseThrow(() -> new EventProcessingException("Invalid ID"));
+    return paymentStore.get(id).orElseThrow(() -> new EventProcessingException("Invalid ID"));
   }
 
   public UUID processPayment(PostPaymentRequest paymentRequest) {
@@ -77,26 +57,21 @@ public class PaymentGatewayService {
   }
 
   public PostPaymentResponse processPaymentDetails(PostPaymentRequest paymentRequest, String idempotencyKey) {
-    incrementCounter("payment.requests.total");
+    paymentMetricsRecorder.incrementTotalRequests();
     String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
     LOG.info("Processing payment request. hasIdempotencyKey={}", normalizedIdempotencyKey != null);
-    String requestSignature = buildRequestSignature(paymentRequest);
-    if (normalizedIdempotencyKey != null) {
-      IdempotentPaymentRecord existingRecord = idempotencyRepository.get(normalizedIdempotencyKey).orElse(null);
-      if (existingRecord != null) {
-        if (!existingRecord.getRequestSignature().equals(requestSignature)) {
-          incrementCounter("payment.requests.idempotency_conflict");
-          LOG.warn("Idempotency key conflict detected");
-          throw new IdempotencyConflictException("Idempotency key already used for a different request");
-        }
-        incrementCounter("payment.requests.idempotency_replay");
-        LOG.info("Returning stored response for idempotent replay");
-        return existingRecord.getResponse();
-      }
+    if (normalizedIdempotencyKey == null) {
+      return processPaymentWithoutIdempotency(paymentRequest);
     }
+    synchronized (lockForIdempotencyKey(normalizedIdempotencyKey)) {
+      String requestSignature = buildRequestSignature(paymentRequest);
+      return processPaymentWithIdempotency(paymentRequest, normalizedIdempotencyKey, requestSignature);
+    }
+  }
 
-    if (!isValidPaymentRequest(paymentRequest)) {
-      incrementCounter("payment.requests.rejected");
+  private PostPaymentResponse processPaymentWithoutIdempotency(PostPaymentRequest paymentRequest) {
+    if (!paymentRequestValidator.isValid(paymentRequest)) {
+      paymentMetricsRecorder.incrementRejected();
       return buildPaymentResponse(
           null,
           PaymentStatus.REJECTED,
@@ -108,87 +83,83 @@ public class PaymentGatewayService {
       );
     }
 
-    BankPaymentRequest bankPaymentRequest = new BankPaymentRequest(
-        paymentRequest.getCardNumber(),
-        String.format("%02d/%d", paymentRequest.getExpiryMonth(), paymentRequest.getExpiryYear()),
-        normalizeCurrency(paymentRequest.getCurrency()),
-        paymentRequest.getAmount(),
-        String.valueOf(paymentRequest.getCvv())
-    );
+    PostPaymentResponse paymentResponse = callBankAndBuildResponse(paymentRequest);
+    paymentStore.add(paymentResponse);
+    LOG.info("Payment processed. status={}, paymentId={}", paymentResponse.getStatus(), paymentResponse.getId());
+    return paymentResponse;
+  }
 
-    ResponseEntity<BankPaymentResponse> bankResponse;
-    try {
-      bankResponse = restTemplate.postForEntity(
-          bankPaymentsUrl,
-          bankPaymentRequest,
-          BankPaymentResponse.class
-      );
-    } catch (HttpStatusCodeException ex) {
-      if (ex.getStatusCode().is5xxServerError()) {
-        incrementCounter("payment.requests.bank_unavailable");
-        LOG.error("Bank simulator unavailable (status={})", ex.getStatusCode().value());
-        throw new BankUnavailableException("Bank simulator is unavailable");
+  private PostPaymentResponse processPaymentWithIdempotency(PostPaymentRequest paymentRequest,
+                                                            String normalizedIdempotencyKey,
+                                                            String requestSignature) {
+    IdempotentPaymentRecord existingRecord = idempotencyStore.get(normalizedIdempotencyKey).orElse(null);
+    if (existingRecord != null) {
+      if (!existingRecord.getRequestSignature().equals(requestSignature)) {
+        paymentMetricsRecorder.incrementIdempotencyConflict();
+        LOG.warn("Idempotency key conflict detected");
+        throw new IdempotencyConflictException("Idempotency key already used for a different request");
       }
-      throw ex;
-    } catch (ResourceAccessException ex) {
-      incrementCounter("payment.requests.bank_unavailable");
-      LOG.error("Bank simulator is unreachable");
-      throw new BankUnavailableException("Bank simulator is unavailable");
+      paymentMetricsRecorder.incrementIdempotencyReplay();
+      LOG.info("Returning stored response for idempotent replay");
+      return existingRecord.getResponse();
     }
 
-    PaymentStatus status = PaymentStatus.DECLINED;
-    if (bankResponse.getBody() != null && bankResponse.getBody().isAuthorized()) {
-      status = PaymentStatus.AUTHORIZED;
-      incrementCounter("payment.requests.authorized");
-    } else {
-      incrementCounter("payment.requests.declined");
-    }
-
-    PostPaymentResponse paymentResponse = buildPaymentResponse(
-        UUID.randomUUID(),
-        status,
-        safeLastFour(paymentRequest.getCardNumber()),
-        paymentRequest.getExpiryMonth(),
-        paymentRequest.getExpiryYear(),
-        normalizeCurrency(paymentRequest.getCurrency()),
-        paymentRequest.getAmount()
-    );
-    paymentsRepository.add(paymentResponse);
-
-    if (normalizedIdempotencyKey != null) {
-      idempotencyRepository.add(
-          normalizedIdempotencyKey,
-          new IdempotentPaymentRecord(requestSignature, paymentResponse)
+    if (!paymentRequestValidator.isValid(paymentRequest)) {
+      paymentMetricsRecorder.incrementRejected();
+      return buildPaymentResponse(
+          null,
+          PaymentStatus.REJECTED,
+          safeLastFour(paymentRequest.getCardNumber()),
+          paymentRequest.getExpiryMonth(),
+          paymentRequest.getExpiryYear(),
+          normalizeCurrency(paymentRequest.getCurrency()),
+          paymentRequest.getAmount()
       );
+    }
+
+    PostPaymentResponse paymentResponse = callBankAndBuildResponse(paymentRequest);
+    paymentStore.add(paymentResponse);
+
+    IdempotentPaymentRecord concurrentRecord = idempotencyStore.addIfAbsent(
+        normalizedIdempotencyKey,
+        new IdempotentPaymentRecord(requestSignature, paymentResponse)
+    );
+    if (concurrentRecord != null) {
+      if (!concurrentRecord.getRequestSignature().equals(requestSignature)) {
+        paymentMetricsRecorder.incrementIdempotencyConflict();
+        LOG.warn("Idempotency key conflict detected");
+        throw new IdempotencyConflictException("Idempotency key already used for a different request");
+      }
+      paymentMetricsRecorder.incrementIdempotencyReplay();
+      LOG.info("Returning stored response for idempotent replay");
+      return concurrentRecord.getResponse();
     }
     LOG.info("Payment processed. status={}, paymentId={}", paymentResponse.getStatus(), paymentResponse.getId());
     return paymentResponse;
   }
 
-  private boolean isValidPaymentRequest(PostPaymentRequest paymentRequest) {
-    if (paymentRequest.getCardNumber() == null || !paymentRequest.getCardNumber().matches("^\\d{14,19}$")) {
-      return false;
+  private PostPaymentResponse callBankAndBuildResponse(PostPaymentRequest paymentRequest) {
+    try {
+      PaymentStatus status = acquiringBankClient.processPayment(paymentRequest);
+      if (status == PaymentStatus.AUTHORIZED) {
+        paymentMetricsRecorder.incrementAuthorized();
+      } else {
+        paymentMetricsRecorder.incrementDeclined();
+      }
+      return buildPaymentResponse(
+          UUID.randomUUID(),
+          status,
+          safeLastFour(paymentRequest.getCardNumber()),
+          paymentRequest.getExpiryMonth(),
+          paymentRequest.getExpiryYear(),
+          normalizeCurrency(paymentRequest.getCurrency()),
+          paymentRequest.getAmount()
+      );
+    } catch (BankUnavailableException ex) {
+      paymentMetricsRecorder.incrementBankUnavailable();
+      LOG.error("Bank simulator unavailable");
+      throw new BankUnavailableException("Bank simulator is unavailable");
     }
-    if (paymentRequest.getExpiryMonth() < 1 || paymentRequest.getExpiryMonth() > 12) {
-      return false;
-    }
-    LocalDate now = LocalDate.now();
-    if (paymentRequest.getExpiryYear() < now.getYear()) {
-      return false;
-    }
-    if (paymentRequest.getExpiryYear() == now.getYear()
-        && paymentRequest.getExpiryMonth() <= now.getMonthValue()) {
-      return false;
-    }
-    String currency = normalizeCurrency(paymentRequest.getCurrency());
-    if (currency == null || currency.length() != 3 || !SUPPORTED_CURRENCIES.contains(currency)) {
-      return false;
-    }
-    if (paymentRequest.getAmount() <= 0) {
-      return false;
-    }
-    String cvv = String.valueOf(paymentRequest.getCvv());
-    return cvv.matches("^\\d{3,4}$");
   }
 
   private int safeLastFour(String cardNumber) {
@@ -240,7 +211,15 @@ public class PaymentGatewayService {
     return paymentResponse;
   }
 
-  private void incrementCounter(String metricName) {
-    Counter.builder(metricName).register(meterRegistry).increment();
+  private static Object[] createIdempotencyLocks() {
+    Object[] locks = new Object[IDEMPOTENCY_LOCK_STRIPES];
+    for (int i = 0; i < locks.length; i++) {
+      locks[i] = new Object();
+    }
+    return locks;
+  }
+
+  private Object lockForIdempotencyKey(String key) {
+    return IDEMPOTENCY_LOCKS[Math.floorMod(key.hashCode(), IDEMPOTENCY_LOCKS.length)];
   }
 }
