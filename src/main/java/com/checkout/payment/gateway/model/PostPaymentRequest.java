@@ -5,6 +5,8 @@ import java.io.Serializable;
 
 public class PostPaymentRequest implements Serializable {
 
+  @JsonProperty("card_number")
+  private String cardNumber;
   @JsonProperty("card_number_last_four")
   private int cardNumberLastFour;
   @JsonProperty("expiry_month")
@@ -14,6 +16,14 @@ public class PostPaymentRequest implements Serializable {
   private String currency;
   private int amount;
   private int cvv;
+
+  public String getCardNumber() {
+    return cardNumber;
+  }
+
+  public void setCardNumber(String cardNumber) {
+    this.cardNumber = cardNumber;
+  }
 
   public int getCardNumberLastFour() {
     return cardNumberLastFour;
