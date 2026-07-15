@@ -45,3 +45,14 @@ For documentation openAPI is included, and it can be found under the following u
   - same key + different payload returns `409 Conflict`
 - Only successful bank-submitted requests (`Authorized`/`Declined`) are stored in the in-memory repository.
 - Responses only include the last four card digits.
+- Operational observability:
+  - actuator endpoints expose `health`, `info`, and `metrics`
+  - health includes a `bankSimulator` component that checks bank URL connectivity
+  - business metrics include:
+    - `payment.requests.total`
+    - `payment.requests.authorized`
+    - `payment.requests.declined`
+    - `payment.requests.rejected`
+    - `payment.requests.idempotency_replay`
+    - `payment.requests.idempotency_conflict`
+    - `payment.requests.bank_unavailable`

@@ -11,6 +11,9 @@ import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.Set;
@@ -35,6 +38,7 @@ public class PaymentGatewayService {
   private final IdempotencyRepository idempotencyRepository;
   private RestTemplate restTemplate;
   private String bankPaymentsUrl = "http://localhost:8080/payments";
+  private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
   public PaymentGatewayService(PaymentsRepository paymentsRepository,
                                IdempotencyRepository idempotencyRepository) {
@@ -45,6 +49,13 @@ public class PaymentGatewayService {
   @Autowired
   public void setRestTemplate(RestTemplate restTemplate) {
     this.restTemplate = restTemplate;
+  }
+
+  @Autowired(required = false)
+  public void setMeterRegistry(MeterRegistry meterRegistry) {
+    if (meterRegistry != null) {
+      this.meterRegistry = meterRegistry;
+    }
   }
 
   @Value("${bank.simulator.url:http://localhost:8080/payments}")
@@ -66,19 +77,26 @@ public class PaymentGatewayService {
   }
 
   public PostPaymentResponse processPaymentDetails(PostPaymentRequest paymentRequest, String idempotencyKey) {
+    incrementCounter("payment.requests.total");
     String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+    LOG.info("Processing payment request. hasIdempotencyKey={}", normalizedIdempotencyKey != null);
     String requestSignature = buildRequestSignature(paymentRequest);
     if (normalizedIdempotencyKey != null) {
       IdempotentPaymentRecord existingRecord = idempotencyRepository.get(normalizedIdempotencyKey).orElse(null);
       if (existingRecord != null) {
         if (!existingRecord.getRequestSignature().equals(requestSignature)) {
+          incrementCounter("payment.requests.idempotency_conflict");
+          LOG.warn("Idempotency key conflict detected");
           throw new IdempotencyConflictException("Idempotency key already used for a different request");
         }
+        incrementCounter("payment.requests.idempotency_replay");
+        LOG.info("Returning stored response for idempotent replay");
         return existingRecord.getResponse();
       }
     }
 
     if (!isValidPaymentRequest(paymentRequest)) {
+      incrementCounter("payment.requests.rejected");
       return buildPaymentResponse(
           null,
           PaymentStatus.REJECTED,
@@ -107,16 +125,23 @@ public class PaymentGatewayService {
       );
     } catch (HttpStatusCodeException ex) {
       if (ex.getStatusCode().is5xxServerError()) {
+        incrementCounter("payment.requests.bank_unavailable");
+        LOG.error("Bank simulator unavailable (status={})", ex.getStatusCode().value());
         throw new BankUnavailableException("Bank simulator is unavailable");
       }
       throw ex;
     } catch (ResourceAccessException ex) {
+      incrementCounter("payment.requests.bank_unavailable");
+      LOG.error("Bank simulator is unreachable");
       throw new BankUnavailableException("Bank simulator is unavailable");
     }
 
     PaymentStatus status = PaymentStatus.DECLINED;
     if (bankResponse.getBody() != null && bankResponse.getBody().isAuthorized()) {
       status = PaymentStatus.AUTHORIZED;
+      incrementCounter("payment.requests.authorized");
+    } else {
+      incrementCounter("payment.requests.declined");
     }
 
     PostPaymentResponse paymentResponse = buildPaymentResponse(
@@ -136,6 +161,7 @@ public class PaymentGatewayService {
           new IdempotentPaymentRecord(requestSignature, paymentResponse)
       );
     }
+    LOG.info("Payment processed. status={}, paymentId={}", paymentResponse.getStatus(), paymentResponse.getId());
     return paymentResponse;
   }
 
@@ -212,5 +238,9 @@ public class PaymentGatewayService {
     paymentResponse.setCurrency(currency);
     paymentResponse.setAmount(amount);
     return paymentResponse;
+  }
+
+  private void incrementCounter(String metricName) {
+    Counter.builder(metricName).register(meterRegistry).increment();
   }
 }
