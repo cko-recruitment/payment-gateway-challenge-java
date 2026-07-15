@@ -3,12 +3,16 @@ package com.checkout.payment.gateway.service;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
 import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.IdempotencyConflictException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
+import com.checkout.payment.gateway.model.IdempotentPaymentRecord;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.repository.IdempotencyRepository;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -28,11 +32,14 @@ public class PaymentGatewayService {
   private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "EUR", "GBP");
 
   private final PaymentsRepository paymentsRepository;
+  private final IdempotencyRepository idempotencyRepository;
   private RestTemplate restTemplate;
   private String bankPaymentsUrl = "http://localhost:8080/payments";
 
-  public PaymentGatewayService(PaymentsRepository paymentsRepository) {
+  public PaymentGatewayService(PaymentsRepository paymentsRepository,
+                               IdempotencyRepository idempotencyRepository) {
     this.paymentsRepository = paymentsRepository;
+    this.idempotencyRepository = idempotencyRepository;
   }
 
   @Autowired
@@ -55,6 +62,22 @@ public class PaymentGatewayService {
   }
 
   public PostPaymentResponse processPaymentDetails(PostPaymentRequest paymentRequest) {
+    return processPaymentDetails(paymentRequest, null);
+  }
+
+  public PostPaymentResponse processPaymentDetails(PostPaymentRequest paymentRequest, String idempotencyKey) {
+    String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+    String requestSignature = buildRequestSignature(paymentRequest);
+    if (normalizedIdempotencyKey != null) {
+      IdempotentPaymentRecord existingRecord = idempotencyRepository.get(normalizedIdempotencyKey).orElse(null);
+      if (existingRecord != null) {
+        if (!existingRecord.getRequestSignature().equals(requestSignature)) {
+          throw new IdempotencyConflictException("Idempotency key already used for a different request");
+        }
+        return existingRecord.getResponse();
+      }
+    }
+
     if (!isValidPaymentRequest(paymentRequest)) {
       return buildPaymentResponse(
           null,
@@ -106,6 +129,13 @@ public class PaymentGatewayService {
         paymentRequest.getAmount()
     );
     paymentsRepository.add(paymentResponse);
+
+    if (normalizedIdempotencyKey != null) {
+      idempotencyRepository.add(
+          normalizedIdempotencyKey,
+          new IdempotentPaymentRecord(requestSignature, paymentResponse)
+      );
+    }
     return paymentResponse;
   }
 
@@ -147,6 +177,28 @@ public class PaymentGatewayService {
       return null;
     }
     return currency.trim().toUpperCase();
+  }
+
+  private String normalizeIdempotencyKey(String idempotencyKey) {
+    if (idempotencyKey == null) {
+      return null;
+    }
+    String normalized = idempotencyKey.trim();
+    if (normalized.isEmpty()) {
+      return null;
+    }
+    return normalized;
+  }
+
+  private String buildRequestSignature(PostPaymentRequest paymentRequest) {
+    return String.join("|",
+        Objects.toString(paymentRequest.getCardNumber(), ""),
+        String.valueOf(paymentRequest.getExpiryMonth()),
+        String.valueOf(paymentRequest.getExpiryYear()),
+        Objects.toString(normalizeCurrency(paymentRequest.getCurrency()), ""),
+        String.valueOf(paymentRequest.getAmount()),
+        String.valueOf(paymentRequest.getCvv())
+    );
   }
 
   private PostPaymentResponse buildPaymentResponse(UUID id, PaymentStatus status, int cardNumberLastFour,

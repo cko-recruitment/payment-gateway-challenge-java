@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController("api")
@@ -28,8 +29,10 @@ public class PaymentGatewayController {
   }
 
   @PostMapping("/payment")
-  public ResponseEntity<PostPaymentResponse> processPayment(@RequestBody PostPaymentRequest request) {
-    PostPaymentResponse response = paymentGatewayService.processPaymentDetails(request);
+  public ResponseEntity<PostPaymentResponse> processPayment(
+      @RequestBody PostPaymentRequest request,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+    PostPaymentResponse response = paymentGatewayService.processPaymentDetails(request, idempotencyKey);
     if (response.getStatus() == PaymentStatus.REJECTED) {
       return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }

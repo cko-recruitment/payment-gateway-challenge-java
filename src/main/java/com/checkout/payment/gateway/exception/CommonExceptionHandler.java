@@ -26,4 +26,11 @@ public class CommonExceptionHandler {
     return new ResponseEntity<>(new ErrorResponse("Acquiring bank unavailable"),
         HttpStatus.SERVICE_UNAVAILABLE);
   }
+
+  @ExceptionHandler(IdempotencyConflictException.class)
+  public ResponseEntity<ErrorResponse> handleIdempotencyConflictException(IdempotencyConflictException ex) {
+    LOG.error("Idempotency conflict", ex);
+    return new ResponseEntity<>(new ErrorResponse("Idempotency key already used for a different request"),
+        HttpStatus.CONFLICT);
+  }
 }

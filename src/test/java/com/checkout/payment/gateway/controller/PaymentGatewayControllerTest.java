@@ -3,6 +3,8 @@ package com.checkout.payment.gateway.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -11,6 +13,7 @@ import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +23,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
@@ -31,6 +35,8 @@ class PaymentGatewayControllerTest {
 
   @Autowired
   private MockMvc mvc;
+  @Autowired
+  private ObjectMapper objectMapper;
   @Autowired
   PaymentsRepository paymentsRepository;
   @MockBean
@@ -124,5 +130,56 @@ class PaymentGatewayControllerTest {
             .content("{\"card_number\":\"2222405343248870\",\"expiry_month\":12,\"expiry_year\":2099,\"currency\":\"USD\",\"amount\":1050,\"cvv\":123}"))
         .andExpect(status().isServiceUnavailable())
         .andExpect(jsonPath("$.message").value("Acquiring bank unavailable"));
+  }
+
+  @Test
+  void whenSameIdempotencyKeyAndSameRequestThenExistingPaymentIsReturned() throws Exception {
+    BankPaymentResponse bankPaymentResponse = new BankPaymentResponse();
+    bankPaymentResponse.setAuthorized(true);
+    bankPaymentResponse.setAuthorizationCode(UUID.randomUUID().toString());
+    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
+        .thenReturn(new ResponseEntity<>(bankPaymentResponse, HttpStatus.OK));
+
+    String body = "{\"card_number\":\"2222405343248877\",\"expiry_month\":12,\"expiry_year\":2099,\"currency\":\"USD\",\"amount\":1050,\"cvv\":123}";
+
+    MvcResult first = mvc.perform(MockMvcRequestBuilders.post("/payment")
+            .header("Idempotency-Key", "retry-key-1")
+            .contentType("application/json")
+            .content(body))
+        .andExpect(status().isOk())
+        .andReturn();
+
+    String firstId = objectMapper.readTree(first.getResponse().getContentAsString()).get("id").asText();
+
+    mvc.perform(MockMvcRequestBuilders.post("/payment")
+            .header("Idempotency-Key", "retry-key-1")
+            .contentType("application/json")
+            .content(body))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(firstId));
+
+    verify(restTemplate, times(1)).postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class));
+  }
+
+  @Test
+  void whenSameIdempotencyKeyAndDifferentRequestThenConflictIsReturned() throws Exception {
+    BankPaymentResponse bankPaymentResponse = new BankPaymentResponse();
+    bankPaymentResponse.setAuthorized(true);
+    bankPaymentResponse.setAuthorizationCode(UUID.randomUUID().toString());
+    when(restTemplate.postForEntity(eq("http://localhost:8080/payments"), any(), eq(BankPaymentResponse.class)))
+        .thenReturn(new ResponseEntity<>(bankPaymentResponse, HttpStatus.OK));
+
+    mvc.perform(MockMvcRequestBuilders.post("/payment")
+            .header("Idempotency-Key", "retry-key-2")
+            .contentType("application/json")
+            .content("{\"card_number\":\"2222405343248877\",\"expiry_month\":12,\"expiry_year\":2099,\"currency\":\"USD\",\"amount\":1050,\"cvv\":123}"))
+        .andExpect(status().isOk());
+
+    mvc.perform(MockMvcRequestBuilders.post("/payment")
+            .header("Idempotency-Key", "retry-key-2")
+            .contentType("application/json")
+            .content("{\"card_number\":\"2222405343248877\",\"expiry_month\":12,\"expiry_year\":2099,\"currency\":\"USD\",\"amount\":2050,\"cvv\":123}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.message").value("Idempotency key already used for a different request"));
   }
 }

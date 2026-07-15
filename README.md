@@ -40,5 +40,8 @@ For documentation openAPI is included, and it can be found under the following u
   - `authorized=true` => `Authorized`
   - `authorized=false` => `Declined`
   - bank unavailability => `503 Service Unavailable`
+- `POST /payment` accepts optional `Idempotency-Key`:
+  - same key + same request payload returns the original response
+  - same key + different payload returns `409 Conflict`
 - Only successful bank-submitted requests (`Authorized`/`Declined`) are stored in the in-memory repository.
 - Responses only include the last four card digits.
