@@ -1,7 +1,8 @@
 # Architecture Evolution
 
-This document outlines the planned evolution of the payment gateway architecture. It
-will be updated as the final solution takes shape.
+This document outlines the evolution of the payment gateway architecture. Phases 1 to 3
+are implemented in this solution; phases 4 and 5 describe the direction I would take the
+system next.
 
 ## Phase 1 — Basic Functionality
 

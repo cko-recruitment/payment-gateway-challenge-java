@@ -147,8 +147,6 @@ File directory: [interview_report.md](docs/architecture.md)
 2. Rejected status was required and it would return the request values.
 3. Authentication was not done, but it would be a critical requirement to have some kind of validation related to it
 4. Amount format follows the same pattern in both client and bank simulator as there is no specification about it
-<!-- Complete this section at the end of the exercise. Focus on what changed between the
-initial architecture and final implementation. -->
 
 ### What would I do next in a production environment?
 

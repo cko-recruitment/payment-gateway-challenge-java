@@ -61,10 +61,10 @@ and tested independently.
 With the main responsibilities separated, I defined the API operations and their request
 and response models.
 
-The intended operations were:
+The operations are:
 
-- `POST /payment` to process a new payment; and
-- `GET /payment/{id}` to retrieve an existing payment.
+- `POST /payments` to process a new payment; and
+- `GET /payments/{id}` to retrieve an existing payment.
 
 I used UUIDs for payment identifiers and designed the responses to expose only the last
 four card digits. I also considered which HTTP status codes should represent invalid
@@ -78,12 +78,12 @@ was implemented.
 ## Step 4 — Implement Payment Retrieval First
 
 I implemented the simpler retrieval path first. This connected the controller, service,
-and in-memory repository and provided an initial end-to-end vertical slice of the
-application.
+and repository and provided an initial end-to-end vertical slice of the application.
 
-The repository uses in-memory storage, which is explicitly allowed by the assessment.
-The service retrieves a payment by UUID and reports a known error when the identifier is
-not present. The shared exception handler then maps that error to an HTTP response.
+At this point the repository used in-memory storage, which the assessment explicitly
+allows; it was replaced with PostgreSQL in Step 7. The service retrieves a payment by
+UUID and reports a known error when the identifier is not present. The shared exception
+handler then maps that error to an HTTP response.
 
 ### Outcome
 
@@ -91,9 +91,6 @@ The application could retrieve a stored payment and return a not-found response 
 unknown identifier. This also verified that the initial layering worked as expected.
 
 ## Step 5 — Implement Payment Processing
-
-<!-- Complete this section while implementing the processing flow. Describe the order in
-which validation, bank communication, response mapping, and persistence were added. -->
 
 The next step was to implement the main payment-processing workflow:
 
@@ -104,14 +101,20 @@ The next step was to implement the main payment-processing workflow:
 5. translate the bank response into the gateway's payment status; and
 6. store and return the processed payment.
 
+`PaymentGatewayService.processPayment` runs these stages in order. Validation happens
+first, so an invalid request never reaches the simulator. A valid request is forwarded by
+`BankSimulatorService`, and the bank's decision is mapped onto the stored payment:
+`authorized: true` becomes `AUTHORIZED` and carries the bank's authorization code, while
+anything else becomes `DECLINED`.
+
 ### Outcome
 
-_To be completed once the processing flow is implemented._
+`POST /payments` processes a payment end to end and returns `201 Created` with the
+resulting status. The payment is persisted with its card number and CVV encrypted, and
+the response exposes only the last four digits of the card. `GET /payments/{id}` returns
+the same view of a previously processed payment.
 
 ## Step 6 — Add Validation and Failure Handling
-
-<!-- Record the validation mechanism, supported currencies, error response format, and
-how simulator timeouts or 503 responses are handled. -->
 
 After establishing the happy path, I addressed invalid requests and failure scenarios.
 The important distinction was between:
@@ -123,60 +126,125 @@ The important distinction was between:
 I kept these outcomes separate so that API consumers could understand whether they
 should correct the request, accept the bank's decision, or retry later.
 
+Validation is applied in two complementary layers. Jakarta Bean Validation annotations on
+`PaymentRequest` cover field-level format rules — card number of 14–19 digits, CVV of 3–4
+digits, a three-letter uppercase currency code, and a positive amount. Rules that depend
+on configuration or on more than one field live behind a `ValidationRule` interface, so
+each is a separate Spring bean that `PaymentValidator` collects and applies in turn:
+
+- `CardExpiryRule` — the expiry month and year must be in the future;
+- `CurrencyRule` — the currency must be one of the configured
+  `payment.supported-currencies` (`USD`, `EUR`, `GBP`); and
+- `IdempotencyKeyRule` — the `Idempotency-Key` header must be 1–255 characters.
+
+I chose this structure so that a new business rule is a new class rather than another
+branch inside an existing method.
+
 ### Outcome
 
-_To be completed with the final error-handling behavior._
+Both validation layers converge on `CommonExceptionHandler`, which returns
+`400 Bad Request` with a `Rejected` status, a combined `error_message`, and a per-field
+`errors` list using snake_case field names. Failures map to distinct responses:
 
-## Step 7 — Build the Automated Test Suite
+| Condition | Response |
+| --- | --- |
+| Field or business rule violation | `400 Bad Request`, status `Rejected` |
+| Malformed request body | `400 Bad Request`, status `Rejected` |
+| Key reused with a different request | `409 Conflict` |
+| Unknown payment identifier | `404 Not Found` |
+| Bank unreachable, or empty/invalid decision | `502 Bad Gateway` |
+
+`BankSimulatorService` treats a transport error, a missing response, and a null
+`authorized` field alike: each raises `BankIntegrationException`, which
+`BankIntegrationExceptionHandler` maps to `502`. This keeps an ambiguous downstream
+result from ever being recorded as a decision.
+
+## Step 7 — Add Persistence and Idempotency
+
+With the flow correct, I replaced in-memory storage with PostgreSQL through Spring Data
+JPA, so that processed payments and their idempotency state survive a restart and can be
+shared by more than one instance.
+
+`POST /payments` requires an `Idempotency-Key` header. Each key owns a durable row in
+`idempotency_records` holding a SHA-256 fingerprint of the request, the creation time,
+and a reference to the resulting payment. The first request for a key inserts a pending
+row; every request for that key then takes a pessimistic lock on that row before
+comparing fingerprints or calling the bank.
+
+### Outcome
+
+Repeating a request with the same key and the same body replays the original response
+without contacting the bank again, while reusing a key with a different body returns
+`409 Conflict`. Because the lock is held on a database row, concurrent requests with the
+same key are serialized, requests with different keys do not block one another, and the
+behavior holds across restarts and multiple instances. The payment and its link to the
+idempotency record are committed in one transaction, so a failure before that commit
+leaves the pending row available for a retry.
+
+## Step 8 — Build the Automated Test Suite
 
 I added tests incrementally as each behavior became available. The first controller
 tests covered successful retrieval and retrieval of an unknown payment.
 
-<!-- Extend this list as tests are added. -->
-
-The final test suite should demonstrate:
+The test suite demonstrates:
 
 - retrieval of an existing payment;
 - retrieval of an unknown payment;
 - authorized and declined payment processing;
 - rejection of each invalid input category;
 - the fact that rejected input never reaches the bank;
-- handling of bank errors and timeouts; and
+- handling of bank errors and timeouts;
+- idempotent replay and idempotency-key conflicts; and
 - masking of sensitive card data.
+
+Tests run against an in-memory H2 database configured in PostgreSQL compatibility mode,
+so `./gradlew test` needs no Docker services.
 
 ### Outcome
 
-The tests provide executable evidence of the required behavior and protect the main
-decisions made during implementation.
+39 tests across 15 classes, covering the controller, service, validation rules, exception
+handlers, bank client, and persistence. JaCoCo reports 98% instruction coverage. The
+tests provide executable evidence of the required behavior and protect the main decisions
+made during implementation.
 
-## Step 8 — Review Security-Sensitive Behavior
+## Step 9 — Review Security-Sensitive Behavior
 
 Because this project handles card information, I reviewed how sensitive values move
 through the application. In particular, I checked that full card numbers and CVVs were
-not returned, persisted unnecessarily, or written to logs.
-
-For the scope of this exercise, responses and stored payment records should contain only
-the last four card digits. In a production system, this would be supported by stronger
-controls such as tokenization, encryption, access controls, and PCI DSS processes.
+not returned, persisted in the clear, or written to logs.
 
 ### Outcome
 
-_To be completed after a final review of request models, persistence, and logging._
+Card numbers and CVVs are encrypted before persistence using Spring Security's
+`Encryptors.delux` (AES-GCM), with the secret and salt supplied through the
+`PAYMENT_ENCRYPTION_SECRET` and `PAYMENT_ENCRYPTION_SALT` environment variables rather
+than hard-coded. Responses expose only the last four digits of the card, and the
+idempotency record stores a SHA-256 fingerprint of the request instead of the card data
+itself. Log statements record identifiers and validation messages, never card numbers or
+CVVs.
 
-## Step 9 — Document and Demonstrate the Final Solution
+For the scope of this exercise, this level of protection is proportionate. A production
+system would add tokenization, managed key rotation, access controls, and PCI DSS
+processes.
 
-Once the implementation and tests are complete, I will perform a final review against
-the original requirements and prepare the following demonstration:
+## Step 10 — Document and Demonstrate the Final Solution
 
-1. start the bank simulator with `docker-compose up`;
-2. start the gateway with `./gradlew bootRun`;
-3. run the automated tests with `./gradlew test`;
-4. inspect the API through Swagger UI at
+I performed a final review against the original requirements and prepared the following
+demonstration:
+
+1. start the gateway with `./gradlew bootRun`, which also starts the PostgreSQL and bank
+   simulator containers;
+2. run the automated tests with `./gradlew test`;
+3. inspect the API through Swagger UI at
    [http://localhost:8090/swagger-ui/index.html](http://localhost:8090/swagger-ui/index.html);
-5. process authorized, declined, and rejected payment examples; and
+4. process authorized, declined, and rejected payment examples;
+5. repeat a request with the same `Idempotency-Key` to show the replayed response; and
 6. retrieve a processed payment by its identifier.
 
 ### Outcome
 
-_To be completed with the final test result and demonstration notes._
-
+The final solution meets the functional requirements of the assessment. `./gradlew
+bootRun` starts the application and its dependencies with a single command, `./gradlew
+test` passes with 39 tests and 98% instruction coverage, and the remaining improvements I
+would prioritize in a production environment are listed in the project
+[README](../README.md).
