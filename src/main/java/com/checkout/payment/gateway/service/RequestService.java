@@ -2,17 +2,14 @@ package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.EventProcessingException;
-import com.checkout.payment.gateway.model.BankPaymentRequest;
-import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PaymentData;
 import com.checkout.payment.gateway.model.PaymentRequestData;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
-import com.checkout.payment.gateway.processor.PaymentsProcessor;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -45,6 +42,7 @@ public class RequestService {
   private static PostPaymentResponse toPostPaymentResponse(PaymentData paymentData) {
     return new PostPaymentResponse(paymentData.id(),
         paymentData.authorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED,
+        HttpStatus.OK.value(),
         paymentData.cardNumberLastFour(), paymentData.expiryMonth(), paymentData.expiryYear(),
         paymentData.currency(), paymentData.amount(), null);
   }

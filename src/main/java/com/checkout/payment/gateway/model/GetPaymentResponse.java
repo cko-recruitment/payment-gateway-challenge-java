@@ -6,7 +6,7 @@ import java.util.UUID;
 public class GetPaymentResponse {
 
   private UUID id;
-  private PaymentStatus status;
+  private PaymentStatus paymentStatus;
   private String cardNumberLastFour;
   private int expiryMonth;
   private int expiryYear;
@@ -21,12 +21,12 @@ public class GetPaymentResponse {
     this.id = id;
   }
 
-  public PaymentStatus getStatus() {
-    return status;
+  public PaymentStatus getPaymentStatus() {
+    return paymentStatus;
   }
 
-  public void setStatus(PaymentStatus status) {
-    this.status = status;
+  public void setPaymentStatus(PaymentStatus paymentStatus) {
+    this.paymentStatus = paymentStatus;
   }
 
   public String getCardNumberLastFour() {
@@ -73,7 +73,7 @@ public class GetPaymentResponse {
   public String toString() {
     return "GetPaymentResponse{" +
         "id=" + id +
-        ", status=" + status +
+        ", status=" + paymentStatus +
         ", cardNumberLastFour=" + cardNumberLastFour +
         ", expiryMonth=" + expiryMonth +
         ", expiryYear=" + expiryYear +
