@@ -1,15 +1,44 @@
-version: "3.8"
+name: payment-gateway
 
+# Which services start is controlled by COMPOSE_PROFILES in .env.
+#   bank    -> bank_simulator only
+#   gateway -> payment_gateway only
+#   all     -> both (also achieved with "bank,gateway")
 services:
   bank_simulator:
     container_name: bank_simulator
     image: bbyars/mountebank:2.8.1
+    profiles: ["bank", "all"]
     ports:
-      - "2525:2525"
-      - "8080:8080"
+      - "${BANK_ADMIN_PORT:-2525}:2525"
+      - "${BANK_PORT:-8080}:8080"
     command: --configfile /imposters/bank_simulator.ejs --allowInjection
     volumes:
       - type: bind
         source: ./imposters
         target: /imposters
-      
+    restart: unless-stopped
+
+  payment_gateway:
+    container_name: payment_gateway
+    profiles: ["gateway", "all"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: payment-gateway:local
+    ports:
+      - "${GATEWAY_PORT:-8090}:8090"
+    environment:
+      SERVER_PORT: 8090
+      # Container-to-container by default. Point at host.docker.internal:8080
+      # in .env when running the gateway against a bank outside compose.
+      PAYMENTS_BANK_API_URL: ${PAYMENTS_BANK_API_URL:-http://bank_simulator:8080}
+      PAYMENTS_SUPPORTED_CURRENCIES: ${PAYMENTS_SUPPORTED_CURRENCIES:-GBP,USD,EUR}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
+    # required: false lets the gateway run on its own when the bank profile
+    # is disabled, instead of compose failing on an undefined dependency.
+    depends_on:
+      bank_simulator:
+        condition: service_started
+        required: false
+    restart: unless-stopped

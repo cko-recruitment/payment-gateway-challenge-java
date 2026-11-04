@@ -18,3 +18,4 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 imposters
+.env
