@@ -4,9 +4,10 @@ import com.checkout.payment.gateway.enums.PaymentStatus;
 import java.util.UUID;
 
 public class GetPaymentResponse {
+
   private UUID id;
-  private PaymentStatus status;
-  private int cardNumberLastFour;
+  private PaymentStatus paymentStatus;
+  private String cardNumberLastFour;
   private int expiryMonth;
   private int expiryYear;
   private String currency;
@@ -20,19 +21,19 @@ public class GetPaymentResponse {
     this.id = id;
   }
 
-  public PaymentStatus getStatus() {
-    return status;
+  public PaymentStatus getPaymentStatus() {
+    return paymentStatus;
   }
 
-  public void setStatus(PaymentStatus status) {
-    this.status = status;
+  public void setPaymentStatus(PaymentStatus paymentStatus) {
+    this.paymentStatus = paymentStatus;
   }
 
-  public int getCardNumberLastFour() {
+  public String getCardNumberLastFour() {
     return cardNumberLastFour;
   }
 
-  public void setCardNumberLastFour(int cardNumberLastFour) {
+  public void setCardNumberLastFour(String cardNumberLastFour) {
     this.cardNumberLastFour = cardNumberLastFour;
   }
 
@@ -72,7 +73,7 @@ public class GetPaymentResponse {
   public String toString() {
     return "GetPaymentResponse{" +
         "id=" + id +
-        ", status=" + status +
+        ", status=" + paymentStatus +
         ", cardNumberLastFour=" + cardNumberLastFour +
         ", expiryMonth=" + expiryMonth +
         ", expiryYear=" + expiryYear +
