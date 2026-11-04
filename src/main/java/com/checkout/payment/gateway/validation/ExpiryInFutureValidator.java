@@ -15,11 +15,12 @@ public class ExpiryInFutureValidator implements ConstraintValidator<ExpiryInFutu
     Integer month = card.expiryMonth();
     Integer year = card.expiryYear();
 
+    // In invalid cases covered by other validators, we return true for this validator.
     if (month == null || year == null) {
-      return false;
+      return true;
     }
     if (month < 1 || month > 12) {
-      return false;
+      return true;
     }
 
     // A card is valid through the end of its expiry month, so the current month passes.

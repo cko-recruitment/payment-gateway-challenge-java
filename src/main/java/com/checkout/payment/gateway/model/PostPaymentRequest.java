@@ -17,7 +17,7 @@ import java.io.Serializable;
 public record PostPaymentRequest(
     @NotNull
     @Size(min = 14, max = 19)
-    @Pattern(regexp = DIGITS_ONLY_REGEX)
+    @Pattern(regexp = DIGITS_ONLY_REGEX, message = "must contain digits only")
     String cardNumber,
     @NotNull
     @Min(1)
@@ -35,7 +35,7 @@ public record PostPaymentRequest(
     Integer amount,
     @NotNull
     @Size(min = 3, max = 4)
-    @Pattern(regexp = DIGITS_ONLY_REGEX)
+    @Pattern(regexp = DIGITS_ONLY_REGEX, message = "must contain digits only")
     String cvv
 ) implements Serializable, ExpiringCard {
 

@@ -28,10 +28,13 @@ public class ApiExceptionHandler {
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
     Stream<FieldViolation> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
-        .map(fe -> new ErrorResponse.FieldViolation(
-            NAMING.translate(fe.getField()),
-            fe.getDefaultMessage(),
-            safeRejectedValue(fe.getField(), fe.getRejectedValue())));
+        .map(fe -> {
+          String field = NAMING.translate(fe.getField());
+          return new ErrorResponse.FieldViolation(
+              field,
+              fe.getDefaultMessage(),
+              safeRejectedValue(field, fe.getRejectedValue()));
+        });
 
     Stream<FieldViolation> globalErrors = ex.getBindingResult().getGlobalErrors().stream()
         .map(oe -> new ErrorResponse.FieldViolation(
