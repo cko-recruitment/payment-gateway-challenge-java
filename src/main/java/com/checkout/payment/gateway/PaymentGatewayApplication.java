@@ -1,9 +1,12 @@
 package com.checkout.payment.gateway;
 
+import com.checkout.payment.gateway.properties.BankProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
+@EnableConfigurationProperties(BankProperties.class)
 public class PaymentGatewayApplication {
 
   public static void main(String[] args) {
