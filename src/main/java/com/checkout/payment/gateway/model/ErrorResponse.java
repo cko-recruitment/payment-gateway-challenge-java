@@ -1,9 +1,9 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import java.util.List;
 
 public class ErrorResponse extends ProblemDetail {
 
@@ -30,9 +30,9 @@ public class ErrorResponse extends ProblemDetail {
 
   }
 
-  public static ErrorResponse validation(List<FieldViolation> errors) {
+  public static ErrorResponse validation(HttpStatus status, List<FieldViolation> errors) {
     ErrorResponse errorResponse = new ErrorResponse();
-    errorResponse.setStatus(HttpStatus.BAD_REQUEST);
+    errorResponse.setStatus(status);
     errorResponse.setTitle("Validation failed");
     errorResponse.setDetail("One or more fields are invalid");
     errorResponse.setError(errors);
@@ -40,11 +40,11 @@ public class ErrorResponse extends ProblemDetail {
 
     return errorResponse;
   }
-
-  public static ErrorResponse malformed(String detail) {
+  
+  public static ErrorResponse malformed(HttpStatus status, String detail) {
     ErrorResponse errorResponse = new ErrorResponse();
-    errorResponse.setStatus(HttpStatus.BAD_REQUEST);
-    errorResponse.setTitle("Malformed request");
+    errorResponse.setStatus(status);
+    errorResponse.setTitle(status.is5xxServerError() ? "Request failed" : "Malformed request");
     errorResponse.setDetail(detail);
     errorResponse.setError(List.of());
     errorResponse.setPaymentStatus(PaymentStatus.REJECTED);

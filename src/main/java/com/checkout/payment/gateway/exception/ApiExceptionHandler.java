@@ -1,49 +1,97 @@
 package com.checkout.payment.gateway.exception;
 
 import com.checkout.payment.gateway.model.ErrorResponse;
+import com.checkout.payment.gateway.model.ErrorResponse.FieldViolation;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies.NamingBase;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import java.util.Set;
+import java.util.stream.Stream;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
   private static final NamingBase NAMING = (NamingBase) PropertyNamingStrategies.SNAKE_CASE;
+  private static final Set<String> SENSITIVE_FIELDS = Set.of("card_number", "cvv");
+  private static final String MASK = "***";
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-    var errors = ex.getBindingResult().getFieldErrors().stream()
+    Stream<FieldViolation> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
         .map(fe -> new ErrorResponse.FieldViolation(
             NAMING.translate(fe.getField()),
             fe.getDefaultMessage(),
-            maskIfSensitive(fe.getField(), fe.getRejectedValue())))
-        .toList();
-    return ResponseEntity.badRequest()
-        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-        .body(ErrorResponse.validation(errors));
+            safeRejectedValue(fe.getField(), fe.getRejectedValue())));
+
+    Stream<FieldViolation> globalErrors = ex.getBindingResult().getGlobalErrors().stream()
+        .map(oe -> new ErrorResponse.FieldViolation(
+            "request",
+            oe.getDefaultMessage(),
+            null));
+
+    return problem(HttpStatus.BAD_REQUEST,
+        ErrorResponse.validation(HttpStatus.BAD_REQUEST,
+            Stream.concat(fieldErrors, globalErrors).toList()));
   }
 
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex) {
-    String detail = (ex.getCause() instanceof InvalidFormatException ife)
-        ? "Invalid value for '%s'".formatted(
-        ife.getPath().isEmpty() ? "body" : ife.getPath().get(0).getFieldName())
+    String detail = (ex.getCause() instanceof MismatchedInputException mie)
+        ? "Invalid value for '%s'".formatted(fieldNameOf(mie))
         : "Request body is not valid JSON";
-    return ResponseEntity.badRequest()
-        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-        .body(ErrorResponse.malformed(detail));
+    return problem(HttpStatus.BAD_REQUEST, ErrorResponse.malformed(HttpStatus.BAD_REQUEST, detail));
   }
 
-  private Object maskIfSensitive(String field, Object value) {
-    return switch (field) {
-      case "cardNumber", "cvv" -> "***";
-      default -> value;
-    };
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+    return problem(HttpStatus.BAD_REQUEST,
+        ErrorResponse.malformed(HttpStatus.BAD_REQUEST,
+            "Invalid value for '%s'".formatted(ex.getName())));
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(
+      HttpMediaTypeNotSupportedException ex) {
+    return problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ErrorResponse.malformed(
+        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+        "Content type '%s' is not supported".formatted(ex.getContentType())));
+  }
+
+  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+  public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+      HttpRequestMethodNotSupportedException ex) {
+    return problem(HttpStatus.METHOD_NOT_ALLOWED, ErrorResponse.malformed(
+        HttpStatus.METHOD_NOT_ALLOWED,
+        "Method '%s' is not supported for this endpoint".formatted(ex.getMethod())));
+  }
+
+  /**
+   * Returns the name of the field by parsing the path.
+   */
+  private static String fieldNameOf(MismatchedInputException mie) {
+    if (mie.getPath().isEmpty() || mie.getPath().get(0).getFieldName() == null) {
+      return "body";
+    }
+    return NAMING.translate(mie.getPath().get(0).getFieldName());
+  }
+
+  private ResponseEntity<ErrorResponse> problem(HttpStatus status, ErrorResponse body) {
+    return ResponseEntity.status(status)
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .body(body);
+  }
+
+  private Object safeRejectedValue(String field, Object value) {
+    return (SENSITIVE_FIELDS.contains(field)) ? MASK : value;
   }
 }

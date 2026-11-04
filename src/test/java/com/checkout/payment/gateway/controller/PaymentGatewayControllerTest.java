@@ -39,18 +39,21 @@ class PaymentGatewayControllerTest {
     mvc.perform(MockMvcRequestBuilders.get("/payment/" + payment.id()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(payment.id().toString()))
-        .andExpect(jsonPath("$.status").value(PaymentStatus.AUTHORIZED.getName()))
-        .andExpect(jsonPath("$.cardNumberLastFour").value(payment.cardNumberLastFour()))
-        .andExpect(jsonPath("$.expiryMonth").value(payment.expiryMonth()))
-        .andExpect(jsonPath("$.expiryYear").value(payment.expiryYear()))
+        .andExpect(jsonPath("$.payment_status").value(PaymentStatus.AUTHORIZED.getName()))
+        .andExpect(jsonPath("$.status").value(200))
+        .andExpect(jsonPath("$.card_number_last_four").value(payment.cardNumberLastFour()))
+        .andExpect(jsonPath("$.expiry_month").value(payment.expiryMonth()))
+        .andExpect(jsonPath("$.expiry_year").value(payment.expiryYear()))
         .andExpect(jsonPath("$.currency").value(payment.currency()))
-        .andExpect(jsonPath("$.amount").value(payment.amount()));
+        .andExpect(jsonPath("$.amount").value(payment.amount()))
+        .andExpect(jsonPath("$.rejection_message").doesNotExist());
   }
 
   @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.get("/payment/" + UUID.randomUUID()))
         .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.message").value("Page not found"));
+        .andExpect(jsonPath("$.detail").value("Page not found"))
+        .andExpect(jsonPath("$.status").value(404));
   }
 }
