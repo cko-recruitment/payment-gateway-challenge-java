@@ -1,10 +1,12 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ErrorResponse extends ProblemDetail {
 
   PaymentStatus paymentStatus;
@@ -41,6 +43,19 @@ public class ErrorResponse extends ProblemDetail {
     return errorResponse;
   }
   
+  /**
+   * A missing payment is not a rejected one, so no payment status is reported.
+   */
+  public static ErrorResponse notFound(String detail) {
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setStatus(HttpStatus.NOT_FOUND);
+    errorResponse.setTitle("Payment not found");
+    errorResponse.setDetail(detail);
+    errorResponse.setError(List.of());
+
+    return errorResponse;
+  }
+
   public static ErrorResponse malformed(HttpStatus status, String detail) {
     ErrorResponse errorResponse = new ErrorResponse();
     errorResponse.setStatus(status);
