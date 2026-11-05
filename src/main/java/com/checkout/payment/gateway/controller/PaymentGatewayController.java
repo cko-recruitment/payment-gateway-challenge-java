@@ -1,7 +1,7 @@
 package com.checkout.payment.gateway.controller;
 
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.service.RequestService;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController
+@RestController("api")
 @RequestMapping("/payment")
 public class PaymentGatewayController {
 
@@ -23,17 +23,14 @@ public class PaymentGatewayController {
     this.requestService = requestService;
   }
 
-  /**
-   * Returns a previously processed payment. The representation is the same one the POST returned
-   * when the payment was created.
-   */
+
   @GetMapping("/{id}")
-  public ResponseEntity<PostPaymentResponse> getPaymentById(@PathVariable UUID id) {
+  public ResponseEntity<PaymentResponse> getPaymentById(@PathVariable UUID id) {
     return ResponseEntity.ok(requestService.getPaymentById(id));
   }
 
   @PostMapping
-  public ResponseEntity<PostPaymentResponse> postPayment(
+  public ResponseEntity<PaymentResponse> postPayment(
       @RequestBody @Valid PostPaymentRequest postPaymentRequest) {
     UUID id = requestService.processPayment(postPaymentRequest);
     return ResponseEntity.ok(requestService.getPaymentById(id));

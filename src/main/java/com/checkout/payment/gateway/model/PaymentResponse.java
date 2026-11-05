@@ -6,7 +6,7 @@ import jakarta.annotation.Nullable;
 import java.util.UUID;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record PostPaymentResponse(
+public record PaymentResponse(
     UUID id,
     PaymentStatus paymentStatus,
     int status,

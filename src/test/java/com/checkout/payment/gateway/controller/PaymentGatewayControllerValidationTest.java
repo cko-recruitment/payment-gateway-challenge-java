@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.service.RequestService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import jakarta.annotation.Nullable;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -133,7 +132,7 @@ class PaymentGatewayControllerValidationTest {
   private void stubAuthorized() {
     UUID id = UUID.randomUUID();
     when(requestService.processPayment(any(PostPaymentRequest.class))).thenReturn(id);
-    when(requestService.getPaymentById(id)).thenReturn(new PostPaymentResponse(
+    when(requestService.getPaymentById(id)).thenReturn(new PaymentResponse(
         id, PaymentStatus.AUTHORIZED, 200, "1111",
         FUTURE.getMonthValue(), FUTURE.getYear(), "GBP", 1000, null));
   }

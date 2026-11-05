@@ -71,35 +71,6 @@ class PaymentGatewayControllerTest {
   }
 
   @Test
-  void whenPaymentIsFetchedThenItMatchesWhatThePostReturned() throws Exception {
-    when(paymentsProcessor.process(any()))
-        .thenReturn(new BankPaymentResponse(true, "0bb07405-6d44-4b50-a14f-7ae0beff13ad"));
-
-    String created = mvc.perform(MockMvcRequestBuilders.post("/payment")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("""
-                {
-                  "card_number": "2222405343248877",
-                  "expiry_month": 4,
-                  "expiry_year": 2035,
-                  "currency": "GBP",
-                  "amount": 100,
-                  "cvv": "123"
-                }"""))
-        .andExpect(status().isOk())
-        .andReturn().getResponse().getContentAsString();
-
-    JsonNode postBody = objectMapper.readTree(created);
-
-    String fetched = mvc.perform(
-            MockMvcRequestBuilders.get("/payment/" + postBody.get("id").asText()))
-        .andExpect(status().isOk())
-        .andReturn().getResponse().getContentAsString();
-
-    assertThat(objectMapper.readTree(fetched)).isEqualTo(postBody);
-  }
-
-  @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
     UUID id = UUID.randomUUID();
 

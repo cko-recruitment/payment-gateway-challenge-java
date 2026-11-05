@@ -5,7 +5,7 @@ import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.PaymentData;
 import com.checkout.payment.gateway.model.PaymentRequestData;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +23,7 @@ public class RequestService {
     this.paymentGatewayService = paymentGatewayService;
   }
 
-  public PostPaymentResponse getPaymentById(UUID id) {
+  public PaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to payment with ID {}", id);
     return paymentGatewayService.getPaymentById(id).map(RequestService::toPostPaymentResponse)
         .orElseThrow(() -> new PaymentNotFoundException(id));
@@ -39,8 +39,8 @@ public class RequestService {
         paymentRequest.cvv());
   }
 
-  private static PostPaymentResponse toPostPaymentResponse(PaymentData paymentData) {
-    return new PostPaymentResponse(paymentData.id(),
+  private static PaymentResponse toPostPaymentResponse(PaymentData paymentData) {
+    return new PaymentResponse(paymentData.id(),
         paymentData.authorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED,
         HttpStatus.OK.value(),
         paymentData.cardNumberLastFour(), paymentData.expiryMonth(), paymentData.expiryYear(),
