@@ -4,18 +4,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 
 /**
- * The ways a call to the acquiring bank can fail, and the response each one produces.
+ * The ways a call to the acquiring bank can fail.
  */
 public enum BankFailure {
 
   /**
-   * The bank answered 4xx. This is 502 rather than a pass-through 400 because the merchant's input
-   * has already passed our own validation, so a rejected request means our contract with the bank
-   * is wrong, not theirs.
+   * The bank answered 4xx. We return 502 because the upstream bank returned an invalid response.
    */
   BANK_REJECTED_REQUEST(HttpStatus.BAD_GATEWAY,
       "The acquiring bank rejected the request from this gateway."),
 
+  /**
+   * The bank answered 5xx. We return 503 because we cannot process payments in this case.
+   */
   BANK_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,
       "The acquiring bank is currently unavailable."),
 

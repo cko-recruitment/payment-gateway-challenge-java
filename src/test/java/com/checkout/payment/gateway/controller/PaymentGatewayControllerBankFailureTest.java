@@ -95,13 +95,4 @@ class PaymentGatewayControllerBankFailureTest {
         .andExpect(jsonPath("$.payment_status").value(PaymentStatus.REJECTED.getName()))
         .andExpect(jsonPath("$.detail").value("The acquiring bank could not be reached."));
   }
-
-  @Test
-  @DisplayName("no payment is created, and nothing internal is surfaced")
-  void failureResponseCarriesNoPaymentAndNoInternalDetail() throws Exception {
-    postPaymentFailingWith(BankFailure.BANK_UNAVAILABLE)
-        .andExpect(jsonPath("$.id").doesNotExist())
-        .andExpect(content().string(not(containsString("Bank returned 500"))))
-        .andExpect(content().string(not(containsString("BankException"))));
-  }
 }

@@ -42,9 +42,6 @@ public class BankPaymentsProcessor implements PaymentsProcessor {
           })
           .body(BankPaymentResponse.class);
     } catch (RestClientException ex) {
-      // ResourceAccessException extends this, so one catch covers a refused connection, a timeout
-      // and a body we could not parse. BankException is a plain RuntimeException, so the one thrown
-      // above for an error status passes straight through.
       throw new BankException(BankFailure.BANK_UNREACHABLE, "Call to the bank failed", ex);
     }
 

@@ -85,38 +85,35 @@ class BankPaymentsProcessorTest {
   }
 
   @Test
-  @DisplayName("the simulator's 503 for a card ending in 0")
-  void bankServiceUnavailable() {
+  void bankServiceUnavailableResultsInBankUnavailableFailure() {
     assertFailsWith(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
         .body("{}").contentType(MediaType.APPLICATION_JSON), BankFailure.BANK_UNAVAILABLE);
   }
 
   @Test
-  void bankInternalServerError() {
+  void bankInternalServerErrorResultsInBankUnavailableFailure() {
     assertFailsWith(withStatus(HttpStatus.INTERNAL_SERVER_ERROR), BankFailure.BANK_UNAVAILABLE);
   }
 
   @Test
-  void bankCannotBeReached() {
+  void bankCannotBeReachedResultsInBankUnreachableFailure() {
     assertFailsWith(withException(new ConnectException("Connection refused")),
         BankFailure.BANK_UNREACHABLE);
   }
 
   @Test
-  void malformedResponseBody() {
+  void malformedResponseBodyResultsInBankUnreachableFailure() {
     assertFailsWith(withSuccess("{\"authorized\":tru", MediaType.APPLICATION_JSON),
         BankFailure.BANK_UNREACHABLE);
   }
 
   @Test
-  @DisplayName("an empty body used to return null and then NPE downstream")
-  void emptyResponseBody() {
+  void emptyResponseBodyResultsInBankUnreachableFailure() {
     assertFailsWith(withSuccess(), BankFailure.BANK_UNREACHABLE);
   }
 
   @Test
-  @DisplayName("a missing 'authorized' field must not be read as a decline")
-  void responseWithoutAnAuthorisationDecision() {
+  void responseWithoutAnAuthorisationDecisionResultsInBankUnreachableFailure() {
     assertFailsWith(withSuccess("{\"authorization_code\":\"abc\"}", MediaType.APPLICATION_JSON),
         BankFailure.BANK_UNREACHABLE);
   }

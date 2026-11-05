@@ -1,8 +1,7 @@
 package com.checkout.payment.gateway.exception;
 
 /**
- * A call to the acquiring bank failed. The {@link BankFailure} decides what the client sees; the
- * message is for our logs.
+ * A call to the acquiring bank failed, categorised using {@link BankFailure}
  */
 public class BankException extends RuntimeException {
 
