@@ -138,17 +138,21 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
   @Test
   @DisplayName("fetching an unknown payment id returns 404")
   void unknownPaymentIdReturns404() throws Exception {
-    HttpResponse<String> response = getPayment(UUID.randomUUID().toString());
+    String unknownId = UUID.randomUUID().toString();
 
+    HttpResponse<String> response = getPayment(unknownId);
+
+    String title = read(response.body(), "$.title");
     String detail = read(response.body(), "$.detail");
     Integer status = read(response.body(), "$.status");
     String paymentStatus = read(response.body(), "$.payment_status");
 
     assertThat(response.statusCode()).isEqualTo(404);
     assertThat(contentType(response)).startsWith("application/problem+json");
-    assertThat(detail).isEqualTo("Page not found");
+    assertThat(title).isEqualTo("Payment not found");
+    assertThat(detail).isEqualTo("No payment found with ID " + unknownId);
     assertThat(status).isEqualTo(404);
-    assertThat(paymentStatus).isEqualTo("Rejected");
+    assertThat(paymentStatus).as("a missing payment is not a rejected one").isNull();
   }
 
   @Test

@@ -3,6 +3,7 @@ package com.checkout.payment.gateway.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.http.HttpResponse;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
@@ -28,15 +29,13 @@ class BankFailureE2eTest extends AbstractE2eTest {
     String detail = read(body, "$.detail");
     Integer status = read(body, "$.status");
     String paymentStatus = read(body, "$.payment_status");
-    Object errors = read(body, "$.error");
+    List<Object> errors = read(body, "$.error");
 
     assertThat(title).isEqualTo("Request failed");
     assertThat(detail).isEqualTo("The acquiring bank is currently unavailable.");
     assertThat(status).isEqualTo(503);
     assertThat(paymentStatus).isEqualTo("Rejected");
-    // ProblemDetail serialises with NON_EMPTY, so the empty violation list is left out
-    // entirely rather than appearing as []. Nothing was wrong with the request itself.
-    assertThat(errors).as("field violations are omitted for a bank failure").isNull();
+    assertThat(errors).as("nothing was wrong with the request itself").isEmpty();
   }
 
   @Test

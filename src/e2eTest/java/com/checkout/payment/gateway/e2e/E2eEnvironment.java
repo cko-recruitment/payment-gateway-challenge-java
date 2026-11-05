@@ -33,9 +33,6 @@ final class E2eEnvironment {
   private static final GenericContainer<?> GATEWAY;
 
   static {
-    // No "is Docker available" pre-check here on purpose: it reports false for any client
-    // initialisation failure, which masks the real reason. The e2eTest task checks the
-    // daemon up front, and Testcontainers' own error is more informative than a guess.
     BANK = new GenericContainer<>(DockerImageName.parse("bbyars/mountebank:2.8.1"))
         .withNetwork(NETWORK)
         .withNetworkAliases(BANK_ALIAS)
@@ -44,10 +41,10 @@ final class E2eEnvironment {
         // the Docker API rather than bind-mounted, which keeps it portable off Windows.
         .withCopyFileToContainer(
             MountableFile.forHostPath(IMPOSTER_FILE), "/imposters/bank_simulator.ejs")
-        // --allowInjection is required: the authorized stub uses a `decorate` JS behavior.
+        // --allowInjection is required: the stub uses a `decorate` JS behavior.
         .withCommand(
             "--configfile", "/imposters/bank_simulator.ejs", "--allowInjection", "--debug")
-        // Waits for the imposter itself to exist, not just for the admin port to listen.
+        // Waits for the imposter to exist on one of its endpoints
         .waitingFor(Wait.forHttp("/imposters/" + BANK_PORT)
             .forPort(BANK_ADMIN_PORT)
             .forStatusCode(200))
@@ -59,8 +56,6 @@ final class E2eEnvironment {
         .withExposedPorts(GATEWAY_PORT)
         .withEnv("PAYMENTS_BANK_API_URL", "http://" + BANK_ALIAS + ":" + BANK_PORT)
         .withEnv("PAYMENTS_SUPPORTED_CURRENCIES", "GBP,USD,EUR")
-        // Not Wait.forHealthcheck(): the Dockerfile's HEALTHCHECK has --start-period=40s, so
-        // Docker cannot report healthy before then. Polling the endpoint ourselves is quicker.
         .waitingFor(Wait.forHttp("/actuator/health").forPort(GATEWAY_PORT).forStatusCode(200))
         .withStartupTimeout(Duration.ofMinutes(2))
         .withLogConsumer(new Slf4jLogConsumer(LOG).withPrefix("gateway"));
