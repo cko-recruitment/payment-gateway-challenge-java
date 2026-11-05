@@ -5,8 +5,11 @@ import com.checkout.payment.gateway.model.ErrorResponse.FieldViolation;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies.NamingBase;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
   private static final NamingBase NAMING = (NamingBase) PropertyNamingStrategies.SNAKE_CASE;
   private static final Set<String> SENSITIVE_FIELDS = Set.of("card_number", "cvv");
@@ -42,9 +47,13 @@ public class ApiExceptionHandler {
             oe.getDefaultMessage(),
             null));
 
+    List<FieldViolation> violations = Stream.concat(fieldErrors, globalErrors).toList();
+    // Only the field names are logged; a rejected value can be the PAN or the CVV.
+    LOG.warn("Rejected a request: {} field(s) failed validation: {}", violations.size(),
+        violations.stream().map(FieldViolation::field).toList());
+
     return problem(HttpStatus.BAD_REQUEST,
-        ErrorResponse.validation(HttpStatus.BAD_REQUEST,
-            Stream.concat(fieldErrors, globalErrors).toList()));
+        ErrorResponse.validation(HttpStatus.BAD_REQUEST, violations));
   }
 
   @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -52,11 +61,13 @@ public class ApiExceptionHandler {
     String detail = (ex.getCause() instanceof MismatchedInputException mie)
         ? "Invalid value for '%s'".formatted(fieldNameOf(mie))
         : "Request body is not valid JSON";
+    LOG.warn("Rejected an unreadable request body: {}", detail);
     return problem(HttpStatus.BAD_REQUEST, ErrorResponse.malformed(HttpStatus.BAD_REQUEST, detail));
   }
 
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+    LOG.warn("Rejected a request carrying an invalid value for '{}'", ex.getName());
     return problem(HttpStatus.BAD_REQUEST,
         ErrorResponse.malformed(HttpStatus.BAD_REQUEST,
             "Invalid value for '%s'".formatted(ex.getName())));
@@ -65,6 +76,7 @@ public class ApiExceptionHandler {
   @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
   public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(
       HttpMediaTypeNotSupportedException ex) {
+    LOG.warn("Rejected a request with the unsupported content type '{}'", ex.getContentType());
     return problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ErrorResponse.malformed(
         HttpStatus.UNSUPPORTED_MEDIA_TYPE,
         "Content type '%s' is not supported".formatted(ex.getContentType())));
@@ -73,6 +85,7 @@ public class ApiExceptionHandler {
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
   public ResponseEntity<ErrorResponse> handleMethodNotSupported(
       HttpRequestMethodNotSupportedException ex) {
+    LOG.warn("Rejected a request using the unsupported method '{}'", ex.getMethod());
     return problem(HttpStatus.METHOD_NOT_ALLOWED, ErrorResponse.malformed(
         HttpStatus.METHOD_NOT_ALLOWED,
         "Method '%s' is not supported for this endpoint".formatted(ex.getMethod())));

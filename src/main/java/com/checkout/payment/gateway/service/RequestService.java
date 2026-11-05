@@ -30,7 +30,10 @@ public class RequestService {
   }
 
   public UUID processPayment(PostPaymentRequest paymentRequest) {
-    return paymentGatewayService.processPayment(toPaymentRequestData(paymentRequest));
+    LOG.debug("Payment request passed validation, handing it to the gateway");
+    UUID id = paymentGatewayService.processPayment(toPaymentRequestData(paymentRequest));
+    LOG.debug("Gateway processed the request as payment {}", id);
+    return id;
   }
 
   private static PaymentRequestData toPaymentRequestData(PostPaymentRequest paymentRequest) {
