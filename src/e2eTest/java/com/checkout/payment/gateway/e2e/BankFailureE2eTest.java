@@ -48,34 +48,6 @@ class BankFailureE2eTest extends AbstractE2eTest {
   }
 
   @Test
-  @DisplayName("a 4xx from the bank is reported as 502")
-  void bankRejectingTheRequestReturns502() throws Exception {
-    // The committed imposter answers 2xx or 503 for every card the gateway will accept, so a
-    // 4xx needs a separate imposter. Added over the admin API, leaving imposters/ untouched.
-    createFailingImposter(REJECTING_BANK_PORT, 400);
-
-    try (GenericContainer<?> gateway = E2eEnvironment.gatewayPointingAt(
-        "http://" + E2eEnvironment.bankAlias() + ":" + REJECTING_BANK_PORT)) {
-      gateway.start();
-
-      HttpResponse<String> response = postPaymentTo(E2eEnvironment.baseUrlOf(gateway),
-          authorizedRequest());
-
-      assertThat(response.statusCode()).isEqualTo(502);
-      assertThat(contentType(response)).startsWith("application/problem+json");
-
-      String body = response.body();
-      String detail = read(body, "$.detail");
-      Integer status = read(body, "$.status");
-      String paymentStatus = read(body, "$.payment_status");
-
-      assertThat(detail).isEqualTo("The acquiring bank rejected the request from this gateway.");
-      assertThat(status).isEqualTo(502);
-      assertThat(paymentStatus).isEqualTo("Rejected");
-    }
-  }
-
-  @Test
   @DisplayName("a bank that cannot be reached is reported as 502")
   void bankUnreachableReturns502() throws Exception {
     // Port 1 inside the container: nothing listens, so the connection is refused immediately

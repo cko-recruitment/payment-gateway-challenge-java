@@ -27,8 +27,10 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
-            grep -E 'FAILED|expected:|but was:|ProviderStrategy|Caused by' \
-              /tmp/e2e.log | cut -c1-280 | sort -u | head -8 \
+            # Order is preserved on purpose: sorting separates each "expected:" from its
+            # "but was:", which makes the pair unreadable.
+            grep -E 'FAILED|expected:|but was:|ProviderStrategy' \
+              /tmp/e2e.log | cut -c1-280 | head -9 \
               | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
             done

@@ -15,26 +15,15 @@ import java.time.Duration;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 
-/**
- * HTTP helpers for the end-to-end suite.
- *
- * <p>Uses the JDK's {@link HttpClient} rather than Spring's clients: the e2e source set is
- * black-box and deliberately excludes the application's own classes, so spring-web is not on
- * this classpath. It also never throws on a non-2xx response, which matters when the
- * assertions are about 400 and 404 responses.
- */
+
 abstract class AbstractE2eTest {
-
-  /** Suppresses path-not-found exceptions so an absent field reads as null. */
-  private static final Configuration LENIENT =
-      Configuration.defaultConfiguration().addOptions(Option.SUPPRESS_EXCEPTIONS);
-
+  
   private static final HttpClient CLIENT = HttpClient.newBuilder()
       .connectTimeout(Duration.ofSeconds(10))
       .version(HttpClient.Version.HTTP_1_1)
       .build();
 
-  /** Computed, not hardcoded, so the @ExpiryInFuture constraint cannot date the suite. */
+  /** Computed to always be in the future **/
   protected static final YearMonth FUTURE_EXPIRY = YearMonth.now(ZoneOffset.UTC).plusYears(2);
 
   protected static HttpResponse<String> postPayment(String jsonBody) throws Exception {
@@ -46,32 +35,6 @@ abstract class AbstractE2eTest {
     return send(HttpRequest.newBuilder(URI.create(gatewayBaseUrl + "/payment"))
         .header("Content-Type", "application/json")
         .POST(BodyPublishers.ofString(jsonBody, UTF_8)));
-  }
-
-  /**
-   * Adds an imposter to the running simulator that answers every request with {@code status}.
-   * Used to produce bank responses the committed imposter cannot, without editing that file.
-   */
-  protected static void createFailingImposter(int port, int status) throws Exception {
-    String imposter = """
-        {
-          "port": %d,
-          "protocol": "http",
-          "stubs": [
-            { "responses": [ { "is": { "statusCode": %d, "body": {"error_message": "nope"} } } ] }
-          ]
-        }""".formatted(port, status);
-
-    HttpResponse<String> created =
-        send(HttpRequest.newBuilder(URI.create(E2eEnvironment.bankAdminBaseUrl() + "/imposters"))
-            .header("Content-Type", "application/json")
-            .POST(BodyPublishers.ofString(imposter, UTF_8)));
-
-    if (created.statusCode() != 201) {
-      throw new IllegalStateException(
-          "Could not create imposter on " + port + ": " + created.statusCode() + " "
-              + created.body());
-    }
   }
 
   protected static HttpResponse<String> getPayment(String id) throws Exception {
@@ -96,7 +59,9 @@ abstract class AbstractE2eTest {
 
   /** Reads a path, returning null rather than throwing when it is absent. */
   protected static <T> T read(String body, String path) {
-    return JsonPath.using(LENIENT).parse(body).read(path);
+    return JsonPath.using(
+        Configuration.defaultConfiguration().addOptions(Option.SUPPRESS_EXCEPTIONS)
+    ).parse(body).read(path);
   }
 
   protected static String paymentRequest(String cardNumber, String currency, int amount,

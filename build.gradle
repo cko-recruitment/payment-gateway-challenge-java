@@ -55,8 +55,6 @@ tasks.register('requireDocker', Exec) {
   group = 'verification'
   description = 'Fails with a readable message when the Docker daemon is unreachable.'
   def serverVersion = new ByteArrayOutputStream()
-  // `docker info --format` exits 0 even when the daemon is unreachable, printing an empty
-  // server version, so the output is checked as well as the exit code.
   commandLine 'docker', 'info', '--format', '{{.ServerVersion}}'
   standardOutput = serverVersion
   errorOutput = new ByteArrayOutputStream()
@@ -74,7 +72,6 @@ tasks.register('buildE2eImage', Exec) {
   dependsOn tasks.named('requireDocker')
   workingDir projectDir
   // Built by the CLI rather than Testcontainers so the build log is visible in Gradle.
-  // BuildKit is not forced: whichever builder Docker defaults to can build this Dockerfile.
   commandLine 'docker', 'build', '-f', 'Dockerfile', '-t', e2eImageTag, '.'
 }
 
