@@ -13,6 +13,13 @@ services:
       - type: bind
         source: ./imposters
         target: /imposters
+    # The service name contains an underscore, which is invalid in a hostname: java.net.URI
+    # reports a null host and the gateway's HTTP client rejects the URL. Clients use this
+    # hyphenated alias instead.
+    networks:
+      default:
+        aliases:
+          - bank-simulator
     restart: unless-stopped
 
   payment_gateway:
@@ -28,7 +35,7 @@ services:
       SERVER_PORT: 8090
       # Container-to-container by default. Point at host.docker.internal:8080
       # in .env when running the gateway against a bank outside compose.
-      PAYMENTS_BANK_API_URL: ${PAYMENTS_BANK_API_URL:-http://bank_simulator:8080}
+      PAYMENTS_BANK_API_URL: ${PAYMENTS_BANK_API_URL:-http://bank-simulator:8080}
       PAYMENTS_SUPPORTED_CURRENCIES: ${PAYMENTS_SUPPORTED_CURRENCIES:-GBP,USD,EUR}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
     depends_on:

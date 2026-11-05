@@ -25,7 +25,9 @@ final class E2eEnvironment {
 
   private static final Logger LOG = LoggerFactory.getLogger(E2eEnvironment.class);
 
-  private static final String BANK_ALIAS = "bank_simulator";
+  // Hyphen, not underscore: underscores are invalid in hostnames, so java.net.URI reports a
+  // null host and the JDK HTTP client behind Spring's RestClient rejects the URI.
+  private static final String BANK_ALIAS = "bank-simulator";
   private static final int BANK_PORT = 8080;
   private static final int BANK_ADMIN_PORT = 2525;
   private static final int GATEWAY_PORT = 8090;
