@@ -19,6 +19,23 @@ imposters/ - contains the bank simulator configuration. Don't change this
 docker-compose.yml - configures the bank simulator
 
 
+## Tests
+
+```
+./gradlew build      # unit tests; no Docker needed
+./gradlew e2eTest    # end-to-end suite; requires Docker
+```
+
+`e2eTest` builds the application image, starts it alongside the bank simulator with
+Testcontainers, and sends real HTTP requests to the containerised gateway. The first run is
+slow (several minutes) because the image build downloads Gradle and all dependencies inside
+the container; later runs hit the Docker layer cache.
+
+The suite lives in `src/e2eTest` and is excluded from `./gradlew build`, which keeps the
+default build fast and Docker-free. Running an E2E test from the IDE needs the image to exist
+first, so run `./gradlew e2eTest` (or `./gradlew buildE2eImage`) at least once — otherwise
+Testcontainers tries to pull `payment-gateway:e2e` from Docker Hub and fails.
+
 ## API Documentation
 For documentation openAPI is included, and it can be found under the following url: **http://localhost:8090/swagger-ui/index.html**
 
