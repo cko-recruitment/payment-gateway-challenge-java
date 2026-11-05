@@ -38,14 +38,13 @@ COPY --from=extract --chown=spring:spring /layers/application/ ./
 USER spring
 
 ENV SERVER_PORT=8090 \
-    PAYMENTS_BANK_API_URL=http://bank_simulator:8080 \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
+    PAYMENTS_BANK_API_URL=http://bank_simulator:8080
 
 EXPOSE 8090
 
-# springdoc's api-docs endpoint doubles as a liveness probe (no actuator on the
-# classpath). Swap for /actuator/health if spring-boot-starter-actuator is added.
+# Actuator health endpoint. Use /actuator/health/readiness instead to gate on
+# the app being ready to serve traffic rather than merely alive.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=40s --retries=5 \
-  CMD wget -q --spider "http://localhost:${SERVER_PORT}/v3/api-docs" || exit 1
+  CMD wget -q --spider "http://localhost:${SERVER_PORT}/actuator/health" || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]

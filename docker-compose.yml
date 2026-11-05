@@ -1,9 +1,5 @@
 name: payment-gateway
 
-# Which services start is controlled by COMPOSE_PROFILES in .env.
-#   bank    -> bank_simulator only
-#   gateway -> payment_gateway only
-#   all     -> both (also achieved with "bank,gateway")
 services:
   bank_simulator:
     container_name: bank_simulator
@@ -35,8 +31,6 @@ services:
       PAYMENTS_BANK_API_URL: ${PAYMENTS_BANK_API_URL:-http://bank_simulator:8080}
       PAYMENTS_SUPPORTED_CURRENCIES: ${PAYMENTS_SUPPORTED_CURRENCIES:-GBP,USD,EUR}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
-    # required: false lets the gateway run on its own when the bank profile
-    # is disabled, instead of compose failing on an undefined dependency.
     depends_on:
       bank_simulator:
         condition: service_started
