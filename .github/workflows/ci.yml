@@ -27,8 +27,8 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
-            grep -E "FAILED|expected:|but was:|AssertionFailedError|Caused by|Container startup" \
-              /tmp/e2e.log | head -9 | while IFS= read -r line; do
+            grep -hoE 'message="[^"]{0,300}"' build/test-results/e2eTest/*.xml 2>/dev/null \
+              | sort -u | head -8 | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
             done
             exit 1
