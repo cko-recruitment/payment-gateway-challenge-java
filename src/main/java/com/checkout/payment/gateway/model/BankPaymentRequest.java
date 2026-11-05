@@ -1,16 +1,13 @@
 package com.checkout.payment.gateway.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.io.Serializable;
 
 public class BankPaymentRequest implements Serializable {
 
-  @JsonProperty("card_number")
   private @NotNull
   @Size(min = 14, max = 19) String cardNumber;
-  @JsonProperty("expiry_date")
   private String expiryDate;
   @NotNull
   @Size(min = 3, max = 3)

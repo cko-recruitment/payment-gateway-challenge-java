@@ -3,7 +3,6 @@ package com.checkout.payment.gateway.model;
 import com.checkout.payment.gateway.validation.ExpiringCard;
 import com.checkout.payment.gateway.validation.ExpiryInFuture;
 import com.checkout.payment.gateway.validation.SupportedCurrency;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -41,7 +40,6 @@ public record PostPaymentRequest(
 
   private static final String DIGITS_ONLY_REGEX = "[0-9]+";
 
-  @JsonProperty("expiry_date")
   public String getExpiryDate() {
     return String.format("%02d/%d", expiryMonth, expiryYear);
   }

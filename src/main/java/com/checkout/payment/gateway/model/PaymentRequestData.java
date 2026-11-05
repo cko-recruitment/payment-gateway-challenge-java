@@ -1,6 +1,5 @@
 package com.checkout.payment.gateway.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -16,7 +15,6 @@ public record PaymentRequestData(
     String cvv
 ) implements Serializable {
 
-  @JsonProperty("expiry_date")
   public String getExpiryDate() {
     return String.format("%02d/%d", expiryMonth, expiryYear);
   }

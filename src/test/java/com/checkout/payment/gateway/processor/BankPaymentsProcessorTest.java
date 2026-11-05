@@ -14,6 +14,9 @@ import com.checkout.payment.gateway.exception.BankException;
 import com.checkout.payment.gateway.exception.BankFailure;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.net.ConnectException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.web.client.RestClient;
@@ -34,7 +38,17 @@ class BankPaymentsProcessorTest {
 
   @BeforeEach
   void setUp() {
-    RestClient.Builder builder = RestClient.builder().baseUrl("http://bank.test");
+    // Mirrors spring.jackson.property-naming-strategy, which the production bank client gets from
+    // Boot's auto-configured RestClient.Builder but a hand-built one does not.
+    ObjectMapper mapper = JsonMapper.builder()
+        .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+        .build();
+    RestClient.Builder builder = RestClient.builder()
+        .baseUrl("http://bank.test")
+        .messageConverters(converters -> converters.replaceAll(
+            converter -> converter instanceof MappingJackson2HttpMessageConverter
+                ? new MappingJackson2HttpMessageConverter(mapper)
+                : converter));
     this.bank = MockRestServiceServer.bindTo(builder).build();
     this.processor = new BankPaymentsProcessor(builder.build());
   }
