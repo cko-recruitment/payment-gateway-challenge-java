@@ -7,10 +7,6 @@ plugins {
 group = 'com.checkout'
 version = '0.0.1-SNAPSHOT'
 
-// Overrides the Spring Boot BOM's managed 1.19.8. Declaring the version on the dependency
-// is not enough: the BOM still forces the transitive core artifact back down.
-ext['testcontainers.version'] = '1.21.3'
-
 java {
   sourceCompatibility = '17'
 }
@@ -42,11 +38,18 @@ configurations.named('e2eTestImplementation') { extendsFrom configurations.testI
 configurations.named('e2eTestRuntimeOnly') { extendsFrom configurations.testRuntimeOnly }
 
 dependencies {
-  // Version from ext['testcontainers.version'] above.
+  // Version managed by the Spring Boot BOM.
   e2eTestImplementation 'org.testcontainers:junit-jupiter'
 }
 
 ext.e2eImageTag = 'payment-gateway:e2e'
+
+// Which API version the daemon speaks. Testcontainers otherwise falls back to its own
+// hardcoded 1.32, which daemons from Docker 25 on reject. Resolved lazily, so a build
+// that does not run the E2E suite never shells out to Docker.
+def dockerApiVersion = providers.exec {
+  commandLine 'docker', 'version', '--format', '{{.Server.APIVersion}}'
+}.standardOutput.asText.map { it.trim() }
 
 tasks.register('requireDocker', Exec) {
   group = 'verification'
@@ -60,13 +63,7 @@ tasks.register('requireDocker', Exec) {
   ignoreExitValue = true
   doLast {
     if (executionResult.get().exitValue != 0 || serverVersion.toString().trim().isEmpty()) {
-      throw new GradleException(
-          'Docker is not reachable.\n' +
-              '  The e2eTest suite builds and runs real containers, so it needs a Docker\n' +
-              '  daemon that is already running and reachable from this shell.\n' +
-              '  Check `docker info`; if the daemon runs inside WSL, run Gradle from there\n' +
-              '  or point DOCKER_HOST at it. Then re-run:\n' +
-              '      ./gradlew e2eTest')
+      throw new GradleException('Docker is not reachable.')
     }
   }
 }
@@ -94,11 +91,18 @@ tasks.register('e2eTest', Test) {
   maxParallelForks = 1           // containers are shared across the suite
   outputs.upToDateWhen { false } // depends on Docker state, never up to date
 
-  // docker-java otherwise negotiates API 1.32, which daemons from Docker 25 on reject:
-  // "client version 1.32 is too old. Minimum supported API version is 1.40". The knob is
-  // the api.version property, or API_VERSION in the environment.
-  systemProperty 'api.version', '1.44'
-  environment 'API_VERSION', '1.44'
+  // Set here rather than at configuration time so `./gradlew build` stays Docker-free.
+  // There is no environment-variable form: api.version is the only key read.
+  doFirst {
+    String apiVersion = dockerApiVersion.get()
+    if (apiVersion.isEmpty()) {
+      throw new GradleException(
+          'The Docker daemon did not report an API version '
+              + "(docker version --format '{{.Server.APIVersion}}').")
+    }
+    systemProperty 'api.version', apiVersion
+    logger.lifecycle("Talking to the Docker daemon over API ${apiVersion}")
+  }
 
   systemProperty 'e2e.image', e2eImageTag
   systemProperty 'e2e.imposterFile',
@@ -107,8 +111,7 @@ tasks.register('e2eTest', Test) {
   testLogging {
     events 'passed', 'skipped', 'failed'
     exceptionFormat = 'full'
-    // Container and Docker-discovery logging goes to the worker's stdout; without this a
-    // startup failure is reported with no explanation of why.
+    // If true, container and Docker-discovery logging goes to the worker's stdout
     showStandardStreams = true
   }
 }
