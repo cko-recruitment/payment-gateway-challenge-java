@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: gradle
+
+      # Kept as two steps so a unit failure is distinguishable from an E2E failure.
+      - name: Unit tests
+        run: ./gradlew build
+
+      # ubuntu-latest provides a Docker daemon with BuildKit, so no extra setup is needed.
+      - name: End-to-end tests
+        run: ./gradlew e2eTest
