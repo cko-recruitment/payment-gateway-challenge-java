@@ -1,0 +1,100 @@
+package com.checkout.payment.gateway.e2e;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.net.http.HttpResponse;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.GenericContainer;
+
+/**
+ * Covers the three ways a call to the acquiring bank can fail, as listed in {@code BankFailure}.
+ *
+ * <p>Only one of them can be provoked through the committed imposter: a card number ending in
+ * zero makes it answer 503. The other two need a bank that behaves differently, so those tests
+ * run a second gateway pointed somewhere else. The gateway reads its bank URL once at startup,
+ * which is why a whole container is needed rather than a per-request override.
+ */
+class BankFailureE2eTest extends AbstractE2eTest {
+
+  /** The committed imposter answers 503 for any card number ending in zero. */
+  private static final String CARD_BANK_ERROR = "2222405343248870";
+
+  private static final int REJECTING_BANK_PORT = 8081;
+
+  @Test
+  @DisplayName("a 5xx from the bank is reported as 503, not as a bare 500")
+  void bankUnavailableReturns503() throws Exception {
+    HttpResponse<String> response =
+        postPayment(paymentRequest(CARD_BANK_ERROR, "GBP", 100, "123"));
+
+    assertThat(response.statusCode()).isEqualTo(503);
+    assertThat(contentType(response)).startsWith("application/problem+json");
+
+    String body = response.body();
+    String title = read(body, "$.title");
+    String detail = read(body, "$.detail");
+    Integer status = read(body, "$.status");
+    String paymentStatus = read(body, "$.payment_status");
+    Object errors = read(body, "$.error");
+
+    assertThat(title).isEqualTo("Request failed");
+    assertThat(detail).isEqualTo("The acquiring bank is currently unavailable.");
+    assertThat(status).isEqualTo(503);
+    assertThat(paymentStatus).isEqualTo("Rejected");
+    // ProblemDetail serialises with NON_EMPTY, so the empty violation list is left out
+    // entirely rather than appearing as []. Nothing was wrong with the request itself.
+    assertThat(errors).as("field violations are omitted for a bank failure").isNull();
+  }
+
+  @Test
+  @DisplayName("a 4xx from the bank is reported as 502")
+  void bankRejectingTheRequestReturns502() throws Exception {
+    // The committed imposter answers 2xx or 503 for every card the gateway will accept, so a
+    // 4xx needs a separate imposter. Added over the admin API, leaving imposters/ untouched.
+    createFailingImposter(REJECTING_BANK_PORT, 400);
+
+    try (GenericContainer<?> gateway = E2eEnvironment.gatewayPointingAt(
+        "http://" + E2eEnvironment.bankAlias() + ":" + REJECTING_BANK_PORT)) {
+      gateway.start();
+
+      HttpResponse<String> response = postPaymentTo(E2eEnvironment.baseUrlOf(gateway),
+          authorizedRequest());
+
+      assertThat(response.statusCode()).isEqualTo(502);
+      assertThat(contentType(response)).startsWith("application/problem+json");
+
+      String body = response.body();
+      String detail = read(body, "$.detail");
+      Integer status = read(body, "$.status");
+      String paymentStatus = read(body, "$.payment_status");
+
+      assertThat(detail).isEqualTo("The acquiring bank rejected the request from this gateway.");
+      assertThat(status).isEqualTo(502);
+      assertThat(paymentStatus).isEqualTo("Rejected");
+    }
+  }
+
+  @Test
+  @DisplayName("a bank that cannot be reached is reported as 502")
+  void bankUnreachableReturns502() throws Exception {
+    // Port 1 inside the container: nothing listens, so the connection is refused immediately
+    // and the test does not wait out the connect timeout.
+    try (GenericContainer<?> gateway = E2eEnvironment.gatewayPointingAt("http://127.0.0.1:1")) {
+      gateway.start();
+
+      HttpResponse<String> response = postPaymentTo(E2eEnvironment.baseUrlOf(gateway),
+          authorizedRequest());
+
+      assertThat(response.statusCode()).isEqualTo(502);
+      assertThat(contentType(response)).startsWith("application/problem+json");
+
+      String body = response.body();
+      String detail = read(body, "$.detail");
+      String paymentStatus = read(body, "$.payment_status");
+
+      assertThat(detail).isEqualTo("The acquiring bank could not be reached.");
+      assertThat(paymentStatus).isEqualTo("Rejected");
+    }
+  }
+}
