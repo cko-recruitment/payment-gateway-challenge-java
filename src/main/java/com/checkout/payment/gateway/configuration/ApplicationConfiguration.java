@@ -1,19 +1,23 @@
 package com.checkout.payment.gateway.configuration;
 
-import java.time.Duration;
-import org.springframework.boot.web.client.RestTemplateBuilder;
+import com.checkout.payment.gateway.properties.BankProperties;
+import org.springframework.boot.web.client.ClientHttpRequestFactories;
+import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 @Configuration
 public class ApplicationConfiguration {
 
   @Bean
-  public RestTemplate restTemplate(RestTemplateBuilder builder) {
+  public RestClient bankRestClient(RestClient.Builder builder, BankProperties bankProperties) {
     return builder
-        .setConnectTimeout(Duration.ofMillis(10000))
-        .setReadTimeout(Duration.ofMillis(10000))
+        .baseUrl(bankProperties.apiUrl())
+        .requestFactory(ClientHttpRequestFactories.get(
+            ClientHttpRequestFactorySettings.DEFAULTS
+                .withConnectTimeout(bankProperties.connectTimeout())
+                .withReadTimeout(bankProperties.readTimeout())))
         .build();
   }
 }

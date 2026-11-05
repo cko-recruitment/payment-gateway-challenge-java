@@ -72,12 +72,19 @@ public class BankPaymentRequest implements Serializable {
 
   @Override
   public String toString() {
-    return "PostPaymentRequest{" +
-        "cardNumberLastFour=" + cardNumber +
+    return "BankPaymentRequest{" +
+        "cardNumber=" + maskedCardNumber() +
         ", expiryDate=" + expiryDate +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
-        ", cvv=" + cvv +
+        ", cvv=***" +
         '}';
+  }
+
+  private String maskedCardNumber() {
+    if (cardNumber == null || cardNumber.length() < 4) {
+      return "****";
+    }
+    return "****" + cardNumber.substring(cardNumber.length() - 4);
   }
 }

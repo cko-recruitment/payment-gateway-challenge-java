@@ -39,7 +39,7 @@ public class PaymentGatewayService {
     BankPaymentResponse bankPaymentResponse = paymentsProcessor.process(
         paymentRequest);
 
-    PaymentData paymentData = PaymentData.createPaymentData(bankPaymentResponse.authorized(),
+    PaymentData paymentData = PaymentData.createPaymentData(bankPaymentResponse.isAuthorized(),
         paymentRequest.getCardNumberLastFour(),
         paymentRequest.expiryMonth(), paymentRequest.expiryYear(),
         paymentRequest.currency(), paymentRequest.amount(),
