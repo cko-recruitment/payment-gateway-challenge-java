@@ -4,7 +4,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -40,11 +39,9 @@ final class E2eEnvironment {
   private static final GenericContainer<?> GATEWAY;
 
   static {
-    if (!DockerClientFactory.instance().isDockerAvailable()) {
-      throw new IllegalStateException(
-          "Docker is not reachable. Start Docker Desktop and run `./gradlew e2eTest`.");
-    }
-
+    // No "is Docker available" pre-check here on purpose: it reports false for any client
+    // initialisation failure, which masks the real reason. The e2eTest task checks the
+    // daemon up front, and Testcontainers' own error is more informative than a guess.
     Network network = Network.newNetwork();
 
     BANK = new GenericContainer<>(DockerImageName.parse("bbyars/mountebank:2.8.1"))
