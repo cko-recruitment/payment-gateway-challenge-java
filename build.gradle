@@ -106,14 +106,6 @@ tasks.register('e2eTest', Test) {
   }
 }
 
-// Compiles the suite without running it, so E2E code errors surface without Docker.
-tasks.register('checkE2eBuild') {
-  group = 'verification'
-  description = 'Compiles the end-to-end suite without running it.'
-  dependsOn tasks.named('compileE2eTestJava')
-}
-
-// Running e2eTest here instead would make every build need a Docker daemon.
 tasks.named('check') {
-  dependsOn tasks.named('checkE2eBuild')
+  dependsOn tasks.named('compileE2eTestJava')
 }
