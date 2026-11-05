@@ -37,8 +37,7 @@ final class E2eEnvironment {
         .withNetwork(NETWORK)
         .withNetworkAliases(BANK_ALIAS)
         .withExposedPorts(BANK_ADMIN_PORT, BANK_PORT)
-        // imposters/ is excluded by .dockerignore, so the stub definition is copied in over
-        // the Docker API rather than bind-mounted, which keeps it portable off Windows.
+        // Copied rather than bind-mounted, which avoids Windows path translation.
         .withCopyFileToContainer(
             MountableFile.forHostPath(IMPOSTER_FILE), "/imposters/bank_simulator.ejs")
         // --allowInjection is required: the stub uses a `decorate` JS behavior.
@@ -83,8 +82,7 @@ final class E2eEnvironment {
   }
 
   /**
-   * An unstarted gateway pointed at some other bank. The bank URL is read once at startup, so
-   * reaching a failing bank means running a second gateway rather than reconfiguring this one.
+   * An unstarted gateway pointed at some other bank.
    */
   static GenericContainer<?> gatewayPointingAt(String bankApiUrl) {
     return new GenericContainer<>(DockerImageName.parse(IMAGE))

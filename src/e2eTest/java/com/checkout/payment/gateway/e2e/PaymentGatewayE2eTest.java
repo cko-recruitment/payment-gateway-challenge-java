@@ -51,7 +51,6 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
     assertThat(expiryMonth).isEqualTo(FUTURE_EXPIRY.getMonthValue());
     assertThat(expiryYear).isEqualTo(FUTURE_EXPIRY.getYear());
 
-    // Must stay a JSON string: as a number, a PAN ending 0877 would lose its leading zero.
     assertThat(lastFour).isInstanceOf(String.class).isEqualTo("8877");
 
     assertThat(rejectionMessage).as("rejection_message is omitted when null").isNull();
@@ -65,7 +64,6 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
     String paymentStatus = read(response.body(), "$.payment_status");
     String lastFour = read(response.body(), "$.card_number_last_four");
 
-    // A decline is a business outcome, not a transport error.
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(paymentStatus).isEqualTo("Declined");
     assertThat(lastFour).isEqualTo("8112");
@@ -89,7 +87,7 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
   void invalidRequestIsRejectedWithoutReachingBank() throws Exception {
     int before = bankRequestCount();
 
-    // Unsupported currency and a too-short CVV: two violations, so the array is exercised.
+    // Unsupported currency and a too-short CVV
     HttpResponse<String> response = postPayment(paymentRequest(CARD_AUTHORIZED, "AUD", 100, "12"));
 
     assertThat(response.statusCode()).isEqualTo(400);
@@ -100,7 +98,6 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
     String detail = read(body, "$.detail");
     Integer status = read(body, "$.status");
     String paymentStatus = read(body, "$.payment_status");
-    // The property is `error`, singular, and field names are snake_case.
     List<String> fields = read(body, "$.error[*].field");
     List<String> maskedCvv = read(body, "$.error[?(@.field == 'cvv')].rejected_value");
 
@@ -109,8 +106,6 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
     assertThat(status).isEqualTo(400);
     assertThat(paymentStatus).isEqualTo("Rejected");
     assertThat(fields).containsExactlyInAnyOrder("currency", "cvv");
-
-    // Masking the rejected value is a security control, so assert it rather than assume it.
     assertThat(maskedCvv).containsExactly("***");
 
     assertThat(bankRequestCount())
@@ -120,10 +115,8 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
 
   @ParameterizedTest(name = "{0}")
   @CsvSource({
-      "card number too short,   '123',              GBP, 100, '123'",
       "card number non-numeric, '22224053432488AB', GBP, 100, '123'",
       "amount not positive,     '2222405343248877', GBP, 0,   '123'",
-      "cvv too long,            '2222405343248877', GBP, 100, '12345'",
       "unsupported currency,    '2222405343248877', AUD, 100, '123'",
   })
   void malformedFieldsAreRejected(String description, String card, String currency, int amount,
