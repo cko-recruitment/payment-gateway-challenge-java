@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
@@ -14,10 +15,13 @@ import com.checkout.payment.gateway.exception.BankException;
 import com.checkout.payment.gateway.exception.BankFailure;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
+import com.checkout.payment.gateway.properties.BankProperties;
 import java.net.ConnectException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,18 +29,32 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.web.client.RestClient;
 
+/**
+ * Drives the real bankRestClient bean with only its transport swapped out, so the JSON asserted
+ * here is the JSON the bank would receive in production.
+ */
+@SpringBootTest
 class BankPaymentsProcessorTest {
 
-  private static final String BANK_URL = "http://bank.test/payments";
+  private static final String AUTHORISED =
+      "{\"authorized\":true,\"authorization_code\":\"0bb07405-6d44-4b50-a14f-7ae0beff13ad\"}";
+
+  @Autowired
+  private RestClient bankRestClient;
+
+  @Autowired
+  private BankProperties bankProperties;
 
   private BankPaymentsProcessor processor;
   private MockRestServiceServer bank;
+  private String paymentsUrl;
 
   @BeforeEach
   void setUp() {
-    RestClient.Builder builder = RestClient.builder().baseUrl("http://bank.test");
+    RestClient.Builder builder = bankRestClient.mutate();
     this.bank = MockRestServiceServer.bindTo(builder).build();
     this.processor = new BankPaymentsProcessor(builder.build());
+    this.paymentsUrl = bankProperties.apiUrl() + "/payments";
   }
 
   private static BankPaymentRequest request() {
@@ -44,23 +62,42 @@ class BankPaymentsProcessorTest {
   }
 
   private BankPaymentResponse processWith(ResponseCreator bankResponse) {
-    bank.expect(requestTo(BANK_URL)).andExpect(method(HttpMethod.POST)).andRespond(bankResponse);
+    bank.expect(requestTo(paymentsUrl)).andExpect(method(HttpMethod.POST)).andRespond(bankResponse);
     BankPaymentResponse response = processor.process(request());
     bank.verify();
     return response;
   }
 
   private void assertFailsWith(ResponseCreator bankResponse, BankFailure expected) {
-    bank.expect(requestTo(BANK_URL)).andExpect(method(HttpMethod.POST)).andRespond(bankResponse);
+    bank.expect(requestTo(paymentsUrl)).andExpect(method(HttpMethod.POST)).andRespond(bankResponse);
     BankException ex = assertThrows(BankException.class, () -> processor.process(request()));
     assertEquals(expected, ex.failure());
     bank.verify();
   }
 
   @Test
+  @DisplayName("the bank's field names come from the Jackson configuration, not from annotations")
+  void outboundRequestUsesTheBanksFieldNames() {
+    bank.expect(requestTo(paymentsUrl))
+        .andExpect(method(HttpMethod.POST))
+        .andExpect(content().json("""
+            {
+              "card_number": "4111111111111111",
+              "expiry_date": "12/2030",
+              "currency": "GBP",
+              "amount": 1000,
+              "cvv": "123"
+            }""", true))
+        .andRespond(withSuccess(AUTHORISED, MediaType.APPLICATION_JSON));
+
+    processor.process(request());
+
+    bank.verify();
+  }
+
+  @Test
   void authorisedPaymentIsReturned() {
-    BankPaymentResponse response = processWith(withSuccess(
-        "{\"authorized\":true,\"authorization_code\":\"0bb07405-6d44-4b50-a14f-7ae0beff13ad\"}",
+    BankPaymentResponse response = processWith(withSuccess(AUTHORISED,
         MediaType.APPLICATION_JSON));
 
     assertTrue(response.isAuthorized());
