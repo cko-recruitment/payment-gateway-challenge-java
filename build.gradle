@@ -27,3 +27,85 @@ dependencies {
 tasks.named('test') {
   useJUnitPlatform()
 }
+
+sourceSets {
+  e2eTest {}
+}
+
+configurations.named('e2eTestImplementation') { extendsFrom configurations.testImplementation }
+configurations.named('e2eTestRuntimeOnly') { extendsFrom configurations.testRuntimeOnly }
+
+dependencies {
+  e2eTestImplementation 'org.testcontainers:junit-jupiter'
+}
+
+ext.e2eImageTag = 'payment-gateway:e2e'
+
+// Must provide the API version of the Daemon so CI runs it correctly
+def dockerApiVersion = providers.exec {
+  commandLine 'docker', 'version', '--format', '{{.Server.APIVersion}}'
+}.standardOutput.asText.map { it.trim() }
+
+tasks.register('requireDocker', Exec) {
+  group = 'verification'
+  description = 'Fails with a readable message when the Docker daemon is unreachable.'
+  def serverVersion = new ByteArrayOutputStream()
+  commandLine 'docker', 'info', '--format', '{{.ServerVersion}}'
+  standardOutput = serverVersion
+  errorOutput = new ByteArrayOutputStream()
+  ignoreExitValue = true
+  doLast {
+    if (executionResult.get().exitValue != 0 || serverVersion.toString().trim().isEmpty()) {
+      throw new GradleException('Docker is not reachable.')
+    }
+  }
+}
+
+tasks.register('buildE2eImage', Exec) {
+  group = 'build'
+  description = "Builds ${e2eImageTag} from the project Dockerfile."
+  dependsOn tasks.named('requireDocker')
+  workingDir projectDir
+  // Built by the CLI rather than Testcontainers so the build log is visible in Gradle.
+  commandLine 'docker', 'build', '-f', 'Dockerfile', '-t', e2eImageTag, '.'
+}
+
+tasks.register('e2eTest', Test) {
+  group = 'verification'
+  description = 'Runs end-to-end tests against the containerised gateway and bank simulator.'
+  dependsOn tasks.named('buildE2eImage')
+  shouldRunAfter tasks.named('test')
+
+  testClassesDirs = sourceSets.e2eTest.output.classesDirs
+  classpath = sourceSets.e2eTest.runtimeClasspath
+  useJUnitPlatform()
+
+  maxParallelForks = 1           // containers are shared across the suite
+  outputs.upToDateWhen { false } // depends on Docker state, never up to date
+
+  doFirst {
+    String apiVersion = dockerApiVersion.get()
+    if (apiVersion.isEmpty()) {
+      throw new GradleException(
+          'The Docker daemon did not report an API version '
+              + "(docker version --format '{{.Server.APIVersion}}').")
+    }
+    systemProperty 'api.version', apiVersion
+    logger.lifecycle("The Docker daemon has API version ${apiVersion}")
+  }
+
+  systemProperty 'e2e.image', e2eImageTag
+  systemProperty 'e2e.imposterFile',
+      layout.projectDirectory.file('imposters/bank_simulator.ejs').asFile.absolutePath
+
+  testLogging {
+    events 'passed', 'skipped', 'failed'
+    exceptionFormat = 'full'
+    // If true, container and Docker-discovery logging goes to the worker's stdout
+    showStandardStreams = true
+  }
+}
+
+tasks.named('check') {
+  dependsOn tasks.named('compileE2eTestJava')
+}

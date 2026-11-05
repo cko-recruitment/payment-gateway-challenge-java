@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: gradle
+
+      # Kept as two steps so a unit failure is distinguishable from an E2E failure.
+      - name: Unit tests
+        run: ./gradlew build
+
+      # ubuntu-latest provides a Docker daemon, so no extra setup is needed. On failure the
+      # tail of the output is echoed as annotations, which are readable without a token.
+      - name: End-to-end tests
+        run: |
+          set -o pipefail
+          ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
+            # Order is preserved on purpose: sorting separates each "expected:" from its
+            # "but was:", which makes the pair unreadable.
+            grep -E 'FAILED|expected:|but was:|ProviderStrategy' \
+              /tmp/e2e.log | cut -c1-280 | head -9 \
+              | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+            exit 1
+          }

@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ---------- Stage 1: build the Spring Boot jar ----------
 FROM eclipse-temurin:17-jdk-alpine AS build
 WORKDIR /workspace
@@ -11,11 +9,14 @@ COPY gradle ./gradle
 COPY build.gradle settings.gradle ./
 RUN chmod +x ./gradlew
 
+# Pre-fetch the Gradle distribution and dependencies in a layer keyed on the build scripts,
+# so editing src does not refetch them. Deliberately no BuildKit cache mount: it would make
+# the image unbuildable with the legacy builder.
+RUN ./gradlew --no-daemon dependencies --configuration runtimeClasspath > /dev/null
+
 COPY src ./src
 
-# The cache mount keeps the Gradle dependency cache between builds.
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew --no-daemon bootJar -x test
+RUN ./gradlew --no-daemon bootJar -x test
 
 # ---------- Stage 2: explode the layered jar ----------
 FROM eclipse-temurin:17-jre-alpine AS extract
@@ -38,7 +39,7 @@ COPY --from=extract --chown=spring:spring /layers/application/ ./
 USER spring
 
 ENV SERVER_PORT=8090 \
-    PAYMENTS_BANK_API_URL=http://bank_simulator:8080
+    PAYMENTS_BANK_API_URL=http://bank-simulator:8080
 
 EXPOSE 8090
 
