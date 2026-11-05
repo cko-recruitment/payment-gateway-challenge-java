@@ -38,8 +38,9 @@ configurations.named('e2eTestImplementation') { extendsFrom configurations.testI
 configurations.named('e2eTestRuntimeOnly') { extendsFrom configurations.testRuntimeOnly }
 
 dependencies {
-  // Version comes from the Spring Boot BOM (testcontainers 1.19.8).
-  e2eTestImplementation 'org.testcontainers:junit-jupiter'
+  // Pinned above the Spring Boot BOM's 1.19.8, which negotiates Docker API 1.32. Newer
+  // daemons reject that: "client version 1.32 is too old. Minimum supported API is 1.40".
+  e2eTestImplementation 'org.testcontainers:junit-jupiter:1.21.3'
 }
 
 ext.e2eImageTag = 'payment-gateway:e2e'
