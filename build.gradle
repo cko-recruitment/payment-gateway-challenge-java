@@ -97,6 +97,9 @@ tasks.register('e2eTest', Test) {
   testLogging {
     events 'passed', 'skipped', 'failed'
     exceptionFormat = 'full'
+    // Container and Docker-discovery logging goes to the worker's stdout; without this a
+    // startup failure is reported with no explanation of why.
+    showStandardStreams = true
   }
 }
 

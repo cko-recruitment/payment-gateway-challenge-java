@@ -21,14 +21,22 @@ jobs:
       - name: Unit tests
         run: ./gradlew build
 
+      - name: Docker environment
+        run: |
+          printf '::notice::id=%s\n' "$(id)"
+          printf '::notice::DOCKER_HOST=%s\n' "${DOCKER_HOST:-unset}"
+          printf '::notice::socket=%s\n' "$(ls -l /var/run/docker.sock 2>&1)"
+          printf '::notice::context=%s\n' \
+            "$(docker context ls --format '{{.Name}}|{{.DockerEndpoint}}|{{.Current}}' | tr '\n' ' ')"
+
       # ubuntu-latest provides a Docker daemon, so no extra setup is needed. On failure the
       # tail of the output is echoed as annotations, which are readable without a token.
       - name: End-to-end tests
         run: |
           set -o pipefail
           ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
-            cat build/test-results/e2eTest/*.xml 2>/dev/null | tr '<' '\n' \
-              | grep -E 'Caused by|Exception:|Error:' | cut -c1-280 | sort -u | head -8 \
+            grep -E 'DockerClientProviderStrategy|Docker environment|docker.sock|Caused by' \
+              /tmp/e2e.log | cut -c1-280 | sort -u | head -8 \
               | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
             done

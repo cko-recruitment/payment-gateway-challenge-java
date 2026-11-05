@@ -9,7 +9,9 @@
 
   <!-- Container plumbing is noisy; the app's own log is kept at INFO so a startup
        failure is still readable. -->
-  <logger name="org.testcontainers" level="WARN"/>
+  <!-- INFO, not WARN: Testcontainers explains Docker discovery failures at INFO, and
+       "could not find a valid Docker environment" is unreadable without it. -->
+  <logger name="org.testcontainers" level="INFO"/>
   <logger name="com.github.dockerjava" level="WARN"/>
   <logger name="tc" level="WARN"/>
 
