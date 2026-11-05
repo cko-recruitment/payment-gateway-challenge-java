@@ -38,9 +38,40 @@ abstract class AbstractE2eTest {
   protected static final YearMonth FUTURE_EXPIRY = YearMonth.now(ZoneOffset.UTC).plusYears(2);
 
   protected static HttpResponse<String> postPayment(String jsonBody) throws Exception {
-    return send(HttpRequest.newBuilder(URI.create(E2eEnvironment.gatewayBaseUrl() + "/payment"))
+    return postPaymentTo(E2eEnvironment.gatewayBaseUrl(), jsonBody);
+  }
+
+  protected static HttpResponse<String> postPaymentTo(String gatewayBaseUrl, String jsonBody)
+      throws Exception {
+    return send(HttpRequest.newBuilder(URI.create(gatewayBaseUrl + "/payment"))
         .header("Content-Type", "application/json")
         .POST(BodyPublishers.ofString(jsonBody, UTF_8)));
+  }
+
+  /**
+   * Adds an imposter to the running simulator that answers every request with {@code status}.
+   * Used to produce bank responses the committed imposter cannot, without editing that file.
+   */
+  protected static void createFailingImposter(int port, int status) throws Exception {
+    String imposter = """
+        {
+          "port": %d,
+          "protocol": "http",
+          "stubs": [
+            { "responses": [ { "is": { "statusCode": %d, "body": {"error_message": "nope"} } } ] }
+          ]
+        }""".formatted(port, status);
+
+    HttpResponse<String> created =
+        send(HttpRequest.newBuilder(URI.create(E2eEnvironment.bankAdminBaseUrl() + "/imposters"))
+            .header("Content-Type", "application/json")
+            .POST(BodyPublishers.ofString(imposter, UTF_8)));
+
+    if (created.statusCode() != 201) {
+      throw new IllegalStateException(
+          "Could not create imposter on " + port + ": " + created.statusCode() + " "
+              + created.body());
+    }
   }
 
   protected static HttpResponse<String> getPayment(String id) throws Exception {
@@ -57,6 +88,10 @@ abstract class AbstractE2eTest {
     HttpResponse<String> imposter = send(HttpRequest.newBuilder(URI.create(
         E2eEnvironment.bankAdminBaseUrl() + "/imposters/" + E2eEnvironment.bankImposterPort())));
     return JsonPath.read(imposter.body(), "$.numberOfRequests");
+  }
+
+  protected static String contentType(HttpResponse<String> response) {
+    return response.headers().firstValue("Content-Type").orElse("");
   }
 
   /** Reads a path, returning null rather than throwing when it is absent. */

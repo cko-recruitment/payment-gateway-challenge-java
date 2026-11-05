@@ -160,8 +160,4 @@ class PaymentGatewayE2eTest extends AbstractE2eTest {
     assertThat(response.statusCode()).isEqualTo(400);
     assertThat(paymentStatus).isEqualTo("Rejected");
   }
-
-  private static String contentType(HttpResponse<String> response) {
-    return response.headers().firstValue("Content-Type").orElse("");
-  }
 }

@@ -35,6 +35,7 @@ final class E2eEnvironment {
   private static final Path IMPOSTER_FILE =
       Path.of(System.getProperty("e2e.imposterFile", "imposters/bank_simulator.ejs"));
 
+  private static final Network NETWORK = Network.newNetwork();
   private static final GenericContainer<?> BANK;
   private static final GenericContainer<?> GATEWAY;
 
@@ -42,10 +43,8 @@ final class E2eEnvironment {
     // No "is Docker available" pre-check here on purpose: it reports false for any client
     // initialisation failure, which masks the real reason. The e2eTest task checks the
     // daemon up front, and Testcontainers' own error is more informative than a guess.
-    Network network = Network.newNetwork();
-
     BANK = new GenericContainer<>(DockerImageName.parse("bbyars/mountebank:2.8.1"))
-        .withNetwork(network)
+        .withNetwork(NETWORK)
         .withNetworkAliases(BANK_ALIAS)
         .withExposedPorts(BANK_ADMIN_PORT, BANK_PORT)
         // imposters/ is excluded by .dockerignore, so the stub definition is copied in over
@@ -63,7 +62,7 @@ final class E2eEnvironment {
         .withLogConsumer(new Slf4jLogConsumer(LOG).withPrefix("bank"));
 
     GATEWAY = new GenericContainer<>(DockerImageName.parse(IMAGE))
-        .withNetwork(network)
+        .withNetwork(NETWORK)
         .withExposedPorts(GATEWAY_PORT)
         .withEnv("PAYMENTS_BANK_API_URL", "http://" + BANK_ALIAS + ":" + BANK_PORT)
         .withEnv("PAYMENTS_SUPPORTED_CURRENCIES", "GBP,USD,EUR")
@@ -88,6 +87,30 @@ final class E2eEnvironment {
 
   static int bankImposterPort() {
     return BANK_PORT;
+  }
+
+  /** Hostname the bank answers on inside the container network. */
+  static String bankAlias() {
+    return BANK_ALIAS;
+  }
+
+  /**
+   * An unstarted gateway pointed at some other bank. The bank URL is read once at startup, so
+   * reaching a failing bank means running a second gateway rather than reconfiguring this one.
+   */
+  static GenericContainer<?> gatewayPointingAt(String bankApiUrl) {
+    return new GenericContainer<>(DockerImageName.parse(IMAGE))
+        .withNetwork(NETWORK)
+        .withExposedPorts(GATEWAY_PORT)
+        .withEnv("PAYMENTS_BANK_API_URL", bankApiUrl)
+        .withEnv("PAYMENTS_SUPPORTED_CURRENCIES", "GBP,USD,EUR")
+        .waitingFor(Wait.forHttp("/actuator/health").forPort(GATEWAY_PORT).forStatusCode(200))
+        .withStartupTimeout(Duration.ofMinutes(2))
+        .withLogConsumer(new Slf4jLogConsumer(LOG).withPrefix("gateway-alt"));
+  }
+
+  static String baseUrlOf(GenericContainer<?> gateway) {
+    return "http://" + gateway.getHost() + ":" + gateway.getMappedPort(GATEWAY_PORT);
   }
 
   private E2eEnvironment() {
