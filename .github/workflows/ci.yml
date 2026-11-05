@@ -23,7 +23,8 @@ jobs:
 
       - name: Docker environment
         run: |
-          printf '::notice::id=%s\n' "$(id)"
+          printf '::notice::groups=%s\n' "$(id -Gn | tr ' ' '+')"
+          printf '::notice::can-read-socket=%s\n' "$(test -r /var/run/docker.sock && echo yes || echo no)"
           printf '::notice::DOCKER_HOST=%s\n' "${DOCKER_HOST:-unset}"
           printf '::notice::socket=%s\n' "$(ls -l /var/run/docker.sock 2>&1)"
           printf '::notice::context=%s\n' \
@@ -35,7 +36,7 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
-            grep -E 'DockerClientProviderStrategy|Docker environment|docker.sock|Caused by' \
+            grep -E 'ProviderStrategy|Permission denied|Connection refused|as a result' \
               /tmp/e2e.log | cut -c1-280 | sort -u | head -8 \
               | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
