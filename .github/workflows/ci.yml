@@ -21,6 +21,14 @@ jobs:
       - name: Unit tests
         run: ./gradlew build
 
-      # ubuntu-latest provides a Docker daemon with BuildKit, so no extra setup is needed.
+      # ubuntu-latest provides a Docker daemon, so no extra setup is needed. On failure the
+      # tail of the output is echoed as annotations, which are readable without a token.
       - name: End-to-end tests
-        run: ./gradlew e2eTest
+        run: |
+          set -o pipefail
+          ./gradlew e2eTest 2>&1 | tee /tmp/e2e.log || {
+            tail -n 20 /tmp/e2e.log | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+            exit 1
+          }
