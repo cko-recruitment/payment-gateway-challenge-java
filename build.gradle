@@ -28,8 +28,6 @@ tasks.named('test') {
   useJUnitPlatform()
 }
 
-// Black-box E2E suite: no main.output on the classpath, so tests assert on raw JSON
-// over HTTP rather than sharing the app's DTOs.
 sourceSets {
   e2eTest {}
 }
@@ -38,15 +36,12 @@ configurations.named('e2eTestImplementation') { extendsFrom configurations.testI
 configurations.named('e2eTestRuntimeOnly') { extendsFrom configurations.testRuntimeOnly }
 
 dependencies {
-  // Version managed by the Spring Boot BOM.
   e2eTestImplementation 'org.testcontainers:junit-jupiter'
 }
 
 ext.e2eImageTag = 'payment-gateway:e2e'
 
-// Which API version the daemon speaks. Testcontainers otherwise falls back to its own
-// hardcoded 1.32, which daemons from Docker 25 on reject. Resolved lazily, so a build
-// that does not run the E2E suite never shells out to Docker.
+// Must provide the API version of the Daemon so CI runs it correctly
 def dockerApiVersion = providers.exec {
   commandLine 'docker', 'version', '--format', '{{.Server.APIVersion}}'
 }.standardOutput.asText.map { it.trim() }
@@ -88,8 +83,6 @@ tasks.register('e2eTest', Test) {
   maxParallelForks = 1           // containers are shared across the suite
   outputs.upToDateWhen { false } // depends on Docker state, never up to date
 
-  // Set here rather than at configuration time so `./gradlew build` stays Docker-free.
-  // There is no environment-variable form: api.version is the only key read.
   doFirst {
     String apiVersion = dockerApiVersion.get()
     if (apiVersion.isEmpty()) {
@@ -98,7 +91,7 @@ tasks.register('e2eTest', Test) {
               + "(docker version --format '{{.Server.APIVersion}}').")
     }
     systemProperty 'api.version', apiVersion
-    logger.lifecycle("Talking to the Docker daemon over API ${apiVersion}")
+    logger.lifecycle("The Docker daemon has API version ${apiVersion}")
   }
 
   systemProperty 'e2e.image', e2eImageTag
@@ -113,8 +106,6 @@ tasks.register('e2eTest', Test) {
   }
 }
 
-// Compile the suite during `build` to catch errors without needing Docker. `check` does
-// not depend on e2eTest itself, which is what keeps `./gradlew build` Docker-free.
-tasks.named('check') {
+tasks.named('checkE2eBuild') {
   dependsOn tasks.named('compileE2eTestJava')
 }

@@ -13,9 +13,8 @@ services:
       - type: bind
         source: ./imposters
         target: /imposters
-    # The service name contains an underscore, which is invalid in a hostname: java.net.URI
-    # reports a null host and the gateway's HTTP client rejects the URL. Clients use this
-    # hyphenated alias instead.
+    # The service name contains an underscore, which is invalid in a hostname. Hence, clients
+    # can use the hyphenated alias instead.
     networks:
       default:
         aliases:
