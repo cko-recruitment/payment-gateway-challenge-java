@@ -14,11 +14,24 @@ public class CommonExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(CommonExceptionHandler.class);
 
+  @ExceptionHandler(PaymentNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleNotFound(PaymentNotFoundException ex) {
+    LOG.info("No payment held for ID {}", ex.getId());
+    return problem(HttpStatus.NOT_FOUND,
+        ErrorResponse.notFound("No payment found with ID %s".formatted(ex.getId())));
+  }
+
   @ExceptionHandler(EventProcessingException.class)
   public ResponseEntity<ErrorResponse> handleException(EventProcessingException ex) {
     LOG.error("Exception happened", ex);
-    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+    return problem(HttpStatus.INTERNAL_SERVER_ERROR,
+        ErrorResponse.malformed(HttpStatus.INTERNAL_SERVER_ERROR,
+            "The request could not be processed"));
+  }
+
+  private ResponseEntity<ErrorResponse> problem(HttpStatus status, ErrorResponse body) {
+    return ResponseEntity.status(status)
         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-        .body(ErrorResponse.malformed(HttpStatus.NOT_FOUND, "Page not found"));
+        .body(body);
   }
 }

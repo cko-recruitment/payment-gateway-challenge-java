@@ -1,7 +1,7 @@
 package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.PaymentData;
 import com.checkout.payment.gateway.model.PaymentRequestData;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
@@ -26,7 +26,7 @@ public class RequestService {
   public PostPaymentResponse getPaymentById(UUID id) {
     LOG.debug("Requesting access to payment with ID {}", id);
     return paymentGatewayService.getPaymentById(id).map(RequestService::toPostPaymentResponse)
-        .orElseThrow(() -> new EventProcessingException("Invalid ID"));
+        .orElseThrow(() -> new PaymentNotFoundException(id));
   }
 
   public UUID processPayment(PostPaymentRequest paymentRequest) {
