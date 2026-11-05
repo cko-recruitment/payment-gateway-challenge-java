@@ -17,7 +17,7 @@ import java.time.ZoneOffset;
 
 
 abstract class AbstractE2eTest {
-  
+
   private static final HttpClient CLIENT = HttpClient.newBuilder()
       .connectTimeout(Duration.ofSeconds(10))
       .version(HttpClient.Version.HTTP_1_1)

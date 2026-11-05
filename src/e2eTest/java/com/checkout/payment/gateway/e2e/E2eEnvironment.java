@@ -14,18 +14,11 @@ import org.testcontainers.utility.MountableFile;
 /**
  * The containers the end-to-end suite runs against: the real application image and the real
  * bank simulator, on a shared network.
- *
- * <p>Started once per test JVM from a static initialiser and never stopped explicitly —
- * Testcontainers' Ryuk sidecar reaps them when the JVM exits. Note that {@code @Testcontainers}
- * with a static {@code @Container} would start and stop them once per <em>class</em>, which
- * would pay the application's startup cost again for every test class.
  */
 final class E2eEnvironment {
 
   private static final Logger LOG = LoggerFactory.getLogger(E2eEnvironment.class);
-
-  // Hyphen, not underscore: underscores are invalid in hostnames, so java.net.URI reports a
-  // null host and the JDK HTTP client behind Spring's RestClient rejects the URI.
+  
   private static final String BANK_ALIAS = "bank-simulator";
   private static final int BANK_PORT = 8080;
   private static final int BANK_ADMIN_PORT = 2525;

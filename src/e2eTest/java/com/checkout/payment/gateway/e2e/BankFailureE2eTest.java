@@ -7,14 +7,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 
-/**
- * Covers the three ways a call to the acquiring bank can fail, as listed in {@code BankFailure}.
- *
- * <p>Only one of them can be provoked through the committed imposter: a card number ending in
- * zero makes it answer 503. The other two need a bank that behaves differently, so those tests
- * run a second gateway pointed somewhere else. The gateway reads its bank URL once at startup,
- * which is why a whole container is needed rather than a per-request override.
- */
 class BankFailureE2eTest extends AbstractE2eTest {
 
   /** The committed imposter answers 503 for any card number ending in zero. */
@@ -50,8 +42,7 @@ class BankFailureE2eTest extends AbstractE2eTest {
   @Test
   @DisplayName("a bank that cannot be reached is reported as 502")
   void bankUnreachableReturns502() throws Exception {
-    // Port 1 inside the container: nothing listens, so the connection is refused immediately
-    // and the test does not wait out the connect timeout.
+    // A fake port where nothing should be present
     try (GenericContainer<?> gateway = E2eEnvironment.gatewayPointingAt("http://127.0.0.1:1")) {
       gateway.start();
 
