@@ -48,7 +48,6 @@ public class ApiExceptionHandler {
             null));
 
     List<FieldViolation> violations = Stream.concat(fieldErrors, globalErrors).toList();
-    // Only the field names are logged; a rejected value can be the PAN or the CVV.
     LOG.warn("Rejected a request: {} field(s) failed validation: {}", violations.size(),
         violations.stream().map(FieldViolation::field).toList());
 

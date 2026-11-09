@@ -26,7 +26,6 @@ public class PaymentGatewayService {
     this.paymentsProcessor = paymentsProcessor;
   }
 
-  // A miss is logged by the repository at debug, and reported by the not-found handler.
   public Optional<PaymentData> getPaymentById(UUID id) {
     return paymentsRepository.get(id);
   }
