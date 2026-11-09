@@ -31,15 +31,23 @@ public class PaymentGatewayService {
   }
 
   public UUID processPayment(PaymentRequestData paymentRequest) {
+    String cardLastFour = paymentRequest.getCardNumberLastFour();
+    LOG.info("Submitting a payment of {} {} on the card ending {} to the bank",
+        paymentRequest.amount(), paymentRequest.currency(), cardLastFour);
+
     BankPaymentResponse bankPaymentResponse = paymentsProcessor.process(
         paymentRequest);
+    LOG.info("The bank {} the payment on the card ending {}",
+        bankPaymentResponse.isAuthorized() ? "authorized" : "declined", cardLastFour);
 
     PaymentData paymentData = PaymentData.createPaymentData(bankPaymentResponse.isAuthorized(),
-        paymentRequest.getCardNumberLastFour(),
+        cardLastFour,
         paymentRequest.expiryMonth(), paymentRequest.expiryYear(),
         paymentRequest.currency(), paymentRequest.amount(),
         bankPaymentResponse.authorizationCode());
     paymentsRepository.add(paymentData);
+    LOG.info("Stored payment {} as {}", paymentData.id(),
+        paymentData.authorized() ? "authorized" : "declined");
 
     return paymentData.id();
   }
