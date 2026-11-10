@@ -42,7 +42,20 @@ first, so run `./gradlew e2eTest` (or `./gradlew buildE2eImage`) at least once â
 Testcontainers tries to pull `payment-gateway:e2e` from Docker Hub and fails.
 
 ## API Documentation
-For documentation openAPI is included, and it can be found under the following url: **http://localhost:8090/swagger-ui/index.html**
+
+OpenAPI documentation is generated from the code and served alongside the running application:
+
+- Swagger UI: **http://localhost:8090/swagger-ui/index.html**
+- OpenAPI spec: **http://localhost:8090/v3/api-docs**
+
+Both endpoints are documented with a description, per-field constraints and worked request and
+response examples for every status code they return. The examples are taken from real responses,
+so they show the exact shape a caller gets.
+
+To try a payment from Swagger UI, start the bank simulator first (`docker compose up`). It decides
+on the last digit of the card number: odd authorizes, even declines, and `0` makes the bank
+unavailable. The request examples use `2222405343248877` (authorized) and `2222405343248112`
+(declined).
 
 ## Bank failures
 
