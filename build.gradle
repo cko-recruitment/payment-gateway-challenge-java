@@ -4,11 +4,16 @@ plugins {
     id 'io.spring.dependency-management' version '1.0.15.RELEASE'
 }
 
+// Security updates for libraries shared by Spring Boot and Springdoc.
+ext['commons-lang3.version'] = '3.18.0'
+ext['snakeyaml.version'] = '2.3'
+ext['jackson-bom.version'] = '2.18.11'
+
 group = 'com.checkout'
 version = '0.0.1-SNAPSHOT'
 
 java {
-    sourceCompatibility = '17'
+    toolchain { languageVersion = JavaLanguageVersion.of(17) }
 }
 
 repositories {
@@ -17,7 +22,15 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+
+    constraints {
+        implementation('org.webjars:swagger-ui:5.34.1') {
+            because 'Update bundled DOMPurify security fixes without upgrading Springdoc'
+        }
+    }
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

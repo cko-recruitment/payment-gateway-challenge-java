@@ -1,0 +1,15 @@
+include:
+  - docker-compose.yml
+
+services:
+  payment_gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: payment-gateway:local
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8090}:8090"
+    environment:
+      ACQUIRER_URL: http://bank_simulator:8080/payments
+    depends_on:
+      - bank_simulator
