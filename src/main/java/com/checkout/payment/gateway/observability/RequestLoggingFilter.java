@@ -37,7 +37,6 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     } finally {
       try {
         Object route = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
-        // Use the matched route template, never raw URLs, queries, headers or bodies.
         LOG.info("http_request request_id={} method={} route={} status={} duration_ms={}",
             requestId, request.getMethod(), route == null ? "unmatched" : route,
             completed ? response.getStatus() : 500,

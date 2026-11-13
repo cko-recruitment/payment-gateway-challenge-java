@@ -11,7 +11,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.checkout.payment.gateway.acquirer.AcquirerClient;
+import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.AcquirerException;
+import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,6 +46,25 @@ class PaymentGatewayControllerTest {
   MockMvc mvc;
   @MockBean
   AcquirerClient acquirer;
+  @Autowired
+  PaymentsRepository paymentsRepository;
+
+  @Test
+  void whenPaymentWithIdExistThenCorrectPaymentIsReturned() throws Exception {
+    PostPaymentResponse payment = new PostPaymentResponse(UUID.randomUUID(),
+        PaymentStatus.AUTHORIZED, "4321", 12, 2099, "GBP", 10);
+    paymentsRepository.add(payment);
+
+    mvc.perform(get("/payments/" + payment.id()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(payment.id().toString()))
+        .andExpect(jsonPath("$.status").value(payment.status().getName()))
+        .andExpect(jsonPath("$.card_number_last_four").value(payment.cardNumberLastFour()))
+        .andExpect(jsonPath("$.expiry_month").value(payment.expiryMonth()))
+        .andExpect(jsonPath("$.expiry_year").value(payment.expiryYear()))
+        .andExpect(jsonPath("$.currency").value(payment.currency()))
+        .andExpect(jsonPath("$.amount").value(payment.amount()));
+  }
 
   @ParameterizedTest
   @CsvSource({"true, Authorized", "false, Declined"})
@@ -105,8 +127,10 @@ class PaymentGatewayControllerTest {
   }
 
   @Test
-  void unknownPaymentReturnsNotFound() throws Exception {
-    mvc.perform(get("/payments/" + UUID.randomUUID())).andExpect(status().isNotFound());
+  void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
+    mvc.perform(get("/payments/" + UUID.randomUUID()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Payment not found"));
   }
 
   @Test
